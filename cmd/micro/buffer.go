@@ -18,7 +18,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/zyedidia/micro/cmd/micro/highlight"
+	"github.com/serge-v/micro/cmd/micro/highlight"
 )
 
 const LargeFileThreshold = 50000
