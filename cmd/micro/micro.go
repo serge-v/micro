@@ -18,7 +18,7 @@ import (
 	"github.com/zyedidia/clipboard"
 	"github.com/zyedidia/tcell"
 	"github.com/zyedidia/tcell/encoding"
-	"layeh.com/gopher-luar"
+	luar "layeh.com/gopher-luar"
 )
 
 const (

@@ -102,6 +102,9 @@ type View struct {
 	// The scrollbar
 	scrollbar *ScrollBar
 
+	// Autocomplete function
+	Completer *Completer
+
 	// Virtual terminal
 	term *Terminal
 }
@@ -150,6 +153,9 @@ func NewViewWidthHeight(buf *Buffer, w, h int) *View {
 			continue
 		}
 	}
+
+	// Load the autocompleter, based on the filetype.
+	v.Completer = NewCompleterForView(v)
 
 	return v
 }
@@ -508,7 +514,7 @@ func (v *View) MoveToMouseClick(x, y int) {
 	v.Cursor.LastVisualX = v.Cursor.GetVisualX()
 }
 
-// Execute actions executes the supplied actions
+// ExecuteActions executes the supplied actions
 func (v *View) ExecuteActions(actions []func(*View, bool) bool) bool {
 	relocate := false
 	readonlyBindingsList := []string{"Delete", "Insert", "Backspace", "Cut", "Play", "Paste", "Move", "Add", "DuplicateLine", "Macro"}
@@ -597,6 +603,12 @@ func (v *View) HandleEvent(event tcell.Event) {
 			}
 		}
 	case *tcell.EventKey:
+		// See whether the autocomplete should take over the keys.
+		if v.Completer.HandleEvent(e.Key()) {
+			// The completer has taken over the key, so break.
+			break
+		}
+
 		// Check first if input is a key binding, if it is we 'eat' the input and don't insert a rune
 		isBinding := false
 		for key, actions := range bindings {
@@ -625,7 +637,7 @@ func (v *View) HandleEvent(event tcell.Event) {
 
 		if !isBinding && e.Key() == tcell.KeyRune {
 			// Check viewtype if readonly don't insert a rune (readonly help and log view etc.)
-			if v.Type.Readonly == false {
+			if !v.Type.Readonly {
 				for _, c := range v.Buf.cursors {
 					v.SetCursor(c)
 
@@ -641,6 +653,12 @@ func (v *View) HandleEvent(event tcell.Event) {
 						v.Buf.Replace(v.Cursor.Loc, next, string(e.Rune()))
 					} else {
 						v.Buf.Insert(v.Cursor.Loc, string(e.Rune()))
+					}
+
+					// Allow the completer to access the rune.
+					err := v.Completer.Process(e.Rune())
+					if err != nil {
+						TermMessage(err)
 					}
 
 					for pl := range loadedPlugins {
@@ -735,6 +753,10 @@ func (v *View) HandleEvent(event tcell.Event) {
 		// This is (hopefully) a temporary solution
 		v.Relocate()
 	}
+
+	// Check to see whether the cursor has moved out of the autocomplete range,
+	// and the completer should exit.
+	v.Completer.DeactivateIfOutOfBounds()
 }
 
 func (v *View) mainCursor() bool {
@@ -1077,6 +1099,9 @@ func (v *View) DisplayView() {
 			screen.SetContent(v.x, yOffset+i, '|', nil, dividerStyle.Reverse(true))
 		}
 	}
+
+	// Draw the autocomplete display on top of everything.
+	v.Completer.Display()
 }
 
 // ShowMultiCursor will display a cursor at a location
