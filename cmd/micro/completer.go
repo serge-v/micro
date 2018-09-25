@@ -73,6 +73,14 @@ func ContentSetterForView(v *View) ContentSetter {
 	}
 }
 
+// CurrentLineFromView gets the current location from a view.
+func CurrentLineFromView(v *View) func() string {
+	return func() string {
+		loc := v.Cursor.Loc
+		return v.Buf.Line(loc.Y)
+	}
+}
+
 // LogToMessenger logs to the global messenger.
 func LogToMessenger() func(s string, values ...interface{}) {
 	return func(s string, values ...interface{}) {
@@ -118,6 +126,8 @@ type Completer struct {
 	Enabled func() bool
 	// PreviousLocation stores the last known location of the cursor.
 	PreviousLocation Loc
+	// Current line
+	Line func() string
 }
 
 // defaultActivators sets whether the character should start autocompletion. The value of zero means that
@@ -159,6 +169,7 @@ func NewCompleterForView(v *View) *Completer {
 		colorscheme["default"].Reverse(true),
 		colorscheme["default"],
 		CompleterEnabledFlagFromView(v),
+		CurrentLineFromView(v),
 	)
 }
 
@@ -174,7 +185,8 @@ func NewCompleter(activators map[rune]int,
 	setter ContentSetter,
 	optionStyleInactive tcell.Style,
 	optionStyleActive tcell.Style,
-	enabled func() bool) *Completer {
+	enabled func() bool,
+	curline func() string) *Completer {
 	return &Completer{
 		Activators:            activators,
 		Deactivators:          deactivators,
@@ -185,9 +197,10 @@ func NewCompleter(activators map[rune]int,
 		LocationOffset:        locationOffset,
 		Replacer:              replacer,
 		Setter:                setter,
-		OptionStyleInactive:   optionStyleInactive,
-		OptionStyleActive:     optionStyleActive,
+		OptionStyleInactive:   tcell.StyleDefault.Background(tcell.ColorBlue).Foreground(tcell.ColorWhite),
+		OptionStyleActive:     tcell.StyleDefault.Background(tcell.ColorLightBlue).Foreground(tcell.ColorBlack),
 		Enabled:               enabled,
+		Line:                  curline,
 	}
 }
 
@@ -339,9 +352,12 @@ func (c *Completer) Display() {
 		return
 	}
 
-	c.Logger("completer.Display: showing %d options", len(c.Options))
 	width := getWidth(c.Options)
 	start := c.CurrentLocation()
+	line := c.Line()
+	tabs := strings.Count(line, "\t")
+	start.X += tabs * 7
+	c.Logger("completer.Display: showing %d options, start: %+v, width: %+v, line: %#v, tabs: %d", len(c.Options), start, width, line, tabs)
 	for iy, o := range c.Options {
 		y := start.Y + iy + 1 // +1 to draw a line below the cursor.
 
