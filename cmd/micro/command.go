@@ -66,6 +66,7 @@ func InitCommands() {
 	commands = make(map[string]Command)
 
 	defaults := DefaultCommands()
+	addMyCommands(defaults)
 	parseCommands(defaults)
 }
 

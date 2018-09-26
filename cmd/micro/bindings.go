@@ -119,6 +119,10 @@ var bindingActions = map[string]func(*View, bool) bool{
 
 	// This was changed to InsertNewline but I don't want to break backwards compatibility
 	"InsertEnter": (*View).InsertNewline,
+
+	"GoInstall":  (*View).goInstall,
+	"GoDef":      (*View).goDef,
+	"SelectNext": (*View).selectNext,
 }
 
 var bindingMouse = map[string]tcell.ButtonMask{

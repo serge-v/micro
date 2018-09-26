@@ -261,11 +261,11 @@ func (c *Completer) Process(r rune) error {
 // It returns true if it took over the key action, or false if it didn't.
 func (c *Completer) HandleEvent(key tcell.Key) bool {
 	if !c.Enabled() {
-		c.Logger("completer.HandleEvent: not enabled")
+		//		c.Logger("completer.HandleEvent: not enabled")
 		return false
 	}
 	if !c.Active {
-		c.Logger("completer.HandleEvent: not active")
+		//		c.Logger("completer.HandleEvent: not active")
 		return false
 	}
 

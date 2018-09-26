@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -285,6 +286,7 @@ var flagVersion = flag.Bool("version", false, "Show the version number and infor
 var flagStartPos = flag.String("startpos", "", "LINE,COL to start the cursor at when opening a buffer.")
 var flagConfigDir = flag.String("config-dir", "", "Specify a custom location for the configuration directory")
 var flagOptions = flag.Bool("options", false, "Show all option help")
+var flagLog = flag.Bool("log", false, "debug log into /tmp/micro.log")
 
 func main() {
 	flag.Usage = func() {
@@ -321,6 +323,17 @@ func main() {
 		fmt.Println("Commit hash:", CommitHash)
 		fmt.Println("Compiled on", CompileDate)
 		os.Exit(0)
+	}
+
+	if *flagLog {
+		f, err := os.Create("/tmp/micro.log")
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
+		log.SetOutput(f)
+	} else {
+		log.SetOutput(ioutil.Discard)
 	}
 
 	if *flagOptions {

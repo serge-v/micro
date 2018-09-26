@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 
@@ -75,6 +76,7 @@ type Messenger struct {
 // AddLog sends a message to the log view
 func (m *Messenger) AddLog(msg ...interface{}) {
 	logMessage := fmt.Sprint(msg...)
+	log.Println(logMessage)
 	buffer := m.getBuffer()
 	buffer.insert(buffer.End(), []byte(logMessage+"\n"))
 	buffer.Cursor.Loc = buffer.End()
