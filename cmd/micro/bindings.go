@@ -121,6 +121,7 @@ var bindingActions = map[string]func(*View, bool) bool{
 	"InsertEnter": (*View).InsertNewline,
 
 	"GoInstall":  (*View).goInstall,
+	"GoComplete": (*View).goComplete,
 	"GoDef":      (*View).goDef,
 	"SelectNext": (*View).selectNext,
 	"OpenCur":    (*View).openCur,

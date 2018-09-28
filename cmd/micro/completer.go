@@ -345,7 +345,7 @@ func distance(a, b int) int {
 // Display the suggestion box.
 func (c *Completer) Display() {
 	if !c.Enabled() {
-		c.Logger("completer.Display: not enabled")
+		//		c.Logger("completer.Display: not enabled")
 		return
 	}
 	if !c.Active {
