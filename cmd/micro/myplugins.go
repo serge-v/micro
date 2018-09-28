@@ -15,7 +15,7 @@ import (
 	"github.com/zyedidia/tcell"
 )
 
-func addMyCommands(m map[string]StrCommand) {
+func addMyPlugins(m map[string]StrCommand) {
 	commandActions["GoInstall"] = goInstall
 	commandActions["GoDef"] = goDef
 	commandActions["GoComplete"] = goComplete
@@ -29,27 +29,25 @@ func addMyCommands(m map[string]StrCommand) {
 	m["selectnext"] = StrCommand{"SelectNext", []Completion{NoCompletion}}
 	m["opencur"] = StrCommand{"OpenCur", []Completion{NoCompletion}}
 	m["wordcomplete"] = StrCommand{"WordComplete", []Completion{NoCompletion}}
+
+	bindingActions["GoInstall"] = (*View).goInstall
+	bindingActions["GoComplete"] = (*View).goComplete
+	bindingActions["GoDef"] = (*View).goDef
+	bindingActions["SelectNext"] = (*View).selectNext
+	bindingActions["OpenCur"] = (*View).openCur
+	bindingActions["WordComplete"] = (*View).wordComplete
 }
 
-/*
-func goDef(args []string) {
-	CurView().goDef(false)
-}
+// WordComplete plugin
 
-func (v *View) goDef(usePlugin bool) bool {
-}
-*/
-
-// WordComplete command
-
-type wordcomplete struct {
+type wordcompletePlugin struct {
 	filter string
 	v      *View // words list view
 	target *View // target view to insert completion
 	words  []string
 }
 
-func (g *wordcomplete) HandleEvent(e *tcell.EventKey) bool {
+func (g *wordcompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 	log.Printf("e: %+v", e)
 
 	switch e.Key() {
@@ -139,7 +137,7 @@ func (v *View) wordComplete(usePlugin bool) bool {
 	c := v.Cursor
 	line := v.Buf.Line(c.Y)
 
-	g := &wordcomplete{
+	g := &wordcompletePlugin{
 		filter: getLeftChunk(line, c.X),
 		target: v,
 		words:  getWords(v.Buf.Buffer(false)),
@@ -155,9 +153,9 @@ func (v *View) wordComplete(usePlugin bool) bool {
 	return true
 }
 
-// GoComplete command
+// GoComplete plugin
 
-type gocomplete struct {
+type gocompletePlugin struct {
 	filter string
 	v      *View // gocode view
 	target *View // target view to insert completion
@@ -176,7 +174,7 @@ func getLeftChunk(line string, pos int) string {
 	return last
 }
 
-func (g *gocomplete) HandleEvent(e *tcell.EventKey) bool {
+func (g *gocompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 	log.Printf("e: %+v", e)
 
 	switch e.Key() {
@@ -253,7 +251,7 @@ func (v *View) goComplete(usePlugin bool) bool {
 		return true
 	}
 
-	g := &gocomplete{
+	g := &gocompletePlugin{
 		target: v,
 	}
 
@@ -278,62 +276,62 @@ func openCur(args []string) {
 	CurView().openCur(false)
 }
 
-var findstr = ""
-var lsout []byte
-var filerOpened bool
+type fileopenerPlugin struct {
+	v      *View
+	filter string
+	lsout  []byte
+}
 
-func handleFilerEvent(v *View, e *tcell.EventKey) bool {
+func (g *fileopenerPlugin) HandleEvent(e *tcell.EventKey) bool {
 	log.Printf("e: %+v", e)
 
 	switch e.Key() {
 	case tcell.KeyEsc:
-		findstr = ""
-		v.Quit(false)
+		g.filter = ""
+		g.v.Quit(false)
 		return true
 	case tcell.KeyDEL:
-		if len(findstr) > 0 {
-			findstr = findstr[:len(findstr)-1]
+		if len(g.filter) > 0 {
+			g.filter = g.filter[:len(g.filter)-1]
 		}
 	case tcell.KeyRune:
 		if e.Modifiers()&tcell.ModAlt == tcell.ModAlt && e.Rune() == 'o' {
-			v.Quit(false)
+			g.v.Quit(false)
 			return true
 		}
-		findstr += string(e.Rune())
+		g.filter += string(e.Rune())
 	case tcell.KeyEnter:
-		c := v.Cursor
-		line := v.Buf.Line(c.Y)
-		v.Quit(false)
-		v.AddTab(false)
+		c := g.v.Cursor
+		line := g.v.Buf.Line(c.Y)
+		g.v.Quit(false)
+		g.v.AddTab(false)
 		CurView().Open(line)
 		return true
 	default:
 		return false
 	}
 
-	lines := strings.Split(string(lsout), "\n")
+	lines := strings.Split(string(g.lsout), "\n")
 	filtered := make([]string, 0, len(lines))
-	messenger.Message("filter: ", findstr, len(filtered))
+	messenger.Message("filter: ", g.filter, len(filtered))
 
 	for _, ln := range lines {
-		if findstr != "" && !strings.HasPrefix(ln, findstr) {
+		if g.filter != "" && !strings.HasPrefix(ln, g.filter) {
 			continue
 		}
 		filtered = append(filtered, ln)
 	}
 	text := strings.Join(filtered, "\n")
 	b := NewBufferFromString(text, "")
-	v.OpenBuffer(b)
-	v.Type.Readonly = true
-	filerOpened = true
+	g.v.OpenBuffer(b)
+	g.v.Type.Readonly = true
 
 	return true
 }
 
 func (v *View) openCur(usePlugin bool) bool {
-	var err error
 	cmd := exec.Command("ls", "-F", "-1")
-	lsout, err = cmd.CombinedOutput()
+	lsout, err := cmd.CombinedOutput()
 	if err != nil {
 		messenger.Error("ls: " + err.Error())
 		return false
@@ -341,8 +339,13 @@ func (v *View) openCur(usePlugin bool) bool {
 
 	b := NewBufferFromString(strings.TrimSpace(string(lsout)), "")
 	v.VSplit(b)
-	nv := CurView()
-	nv.handler = func(e *tcell.EventKey) bool { return handleFilerEvent(nv, e) }
+
+	g := &fileopenerPlugin{
+		v:     CurView(),
+		lsout: lsout,
+	}
+
+	g.v.handler = func(e *tcell.EventKey) bool { return g.HandleEvent(e) }
 	return true
 }
 
@@ -406,7 +409,7 @@ type errorLine struct {
 	message string
 }
 
-var myplugin struct {
+var goinstallPlugin struct {
 	lines      []errorLine
 	cur        int
 	hasNextErr bool
@@ -433,7 +436,7 @@ func (v *View) gotoError(ln errorLine) {
 
 func (v *View) goInstall(usePlugin bool) bool {
 	log.Println("goInstall view command")
-	p := &myplugin
+	p := &goinstallPlugin
 	if p.hasNextErr {
 		p.cur++
 		if len(p.lines) >= p.cur+1 {
