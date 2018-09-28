@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -18,12 +21,14 @@ func addMyCommands(m map[string]StrCommand) {
 	commandActions["GoComplete"] = goComplete
 	commandActions["SelectNext"] = selectNext
 	commandActions["OpenCur"] = openCur
+	commandActions["WordComplete"] = wordComplete
 
 	m["goinstall"] = StrCommand{"GoInstall", []Completion{NoCompletion}}
 	m["godef"] = StrCommand{"GoDef", []Completion{NoCompletion}}
 	m["gocomplete"] = StrCommand{"GoComplete", []Completion{NoCompletion}}
 	m["selectnext"] = StrCommand{"SelectNext", []Completion{NoCompletion}}
 	m["opencur"] = StrCommand{"OpenCur", []Completion{NoCompletion}}
+	m["wordcomplete"] = StrCommand{"WordComplete", []Completion{NoCompletion}}
 }
 
 /*
@@ -34,6 +39,123 @@ func goDef(args []string) {
 func (v *View) goDef(usePlugin bool) bool {
 }
 */
+
+// WordComplete command
+
+type wordcomplete struct {
+	filter string
+	v      *View // words list view
+	target *View // target view to insert completion
+	words  []string
+}
+
+func (g *wordcomplete) HandleEvent(e *tcell.EventKey) bool {
+	log.Printf("e: %+v", e)
+
+	switch e.Key() {
+	case tcell.KeyRune:
+		if e.Modifiers()&tcell.ModAlt == tcell.ModAlt {
+			g.v.Quit(false)
+			return true
+		}
+		g.filter += string(e.Rune())
+	case tcell.KeyDEL:
+		if len(g.filter) > 0 {
+			g.filter = g.filter[:len(g.filter)-1]
+		}
+	case tcell.KeyEnter:
+		c := g.v.Cursor
+		line := g.v.Buf.Line(c.Y)
+		g.v.Quit(false)
+		c = g.target.Cursor
+		targetLine := g.target.Buf.Line(c.Y)
+		prefix := getLeftChunk(targetLine, c.X)
+		line = strings.TrimPrefix(line, prefix)
+		g.target.Buf.Insert(Loc{c.X, c.Y}, line)
+		return true
+	case tcell.KeyEsc, tcell.KeyCtrlSpace:
+		g.v.Quit(false)
+		return true
+	default:
+		return false
+	}
+
+	messenger.Message("filter: ", g.filter)
+
+	words := getFiltered(g.words, g.filter)
+	b := NewBufferFromString(strings.Join(words, "\n"), "")
+	g.v.OpenBuffer(b)
+	g.v.Type.Readonly = true
+	log.Println("filter:", g.filter, "words:", len(g.words), "filtered:", len(words))
+
+	return true
+}
+
+func wordComplete(args []string) {
+	CurView().wordComplete(false)
+}
+
+func getWords(r io.Reader) []string {
+	sc := bufio.NewScanner(r)
+	sc.Split(bufio.ScanWords)
+	var words, swords []string
+	for sc.Scan() {
+		cc := strings.FieldsFunc(sc.Text(), func(r rune) bool {
+			return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+		})
+		for _, t := range cc {
+			if len(t) > 3 {
+				words = append(words, t)
+			}
+		}
+	}
+	sort.Strings(words)
+	var prev string
+	for _, w := range words {
+		if w != prev {
+			prev = w
+			swords = append(swords, w)
+		}
+	}
+	return swords
+}
+
+func getFiltered(words []string, prefix string) []string {
+	var res []string
+	for _, w := range words {
+		if strings.HasPrefix(w, prefix) {
+			res = append(res, w)
+		}
+	}
+	return res
+}
+
+func (v *View) wordComplete(usePlugin bool) bool {
+	buf := v.Buf
+	if buf.FileType() != "go" {
+		return false
+	}
+
+	c := v.Cursor
+	line := v.Buf.Line(c.Y)
+
+	g := &wordcomplete{
+		filter: getLeftChunk(line, c.X),
+		target: v,
+		words:  getWords(v.Buf.Buffer(false)),
+	}
+
+	words := getFiltered(g.words, g.filter)
+	b := NewBufferFromString(strings.Join(words, "\n"), "")
+	v.VSplit(b)
+	g.v = CurView()
+	g.v.Type.Readonly = true
+	g.v.handler = func(e *tcell.EventKey) bool { return g.HandleEvent(e) }
+
+	return true
+}
+
+// GoComplete command
 
 type gocomplete struct {
 	filter string
