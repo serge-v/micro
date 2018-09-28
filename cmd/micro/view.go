@@ -107,6 +107,9 @@ type View struct {
 
 	// Virtual terminal
 	term *Terminal
+
+	// Custom handler
+	handler func(event *tcell.EventKey) bool
 }
 
 // NewView returns a new fullscreen view
@@ -215,7 +218,7 @@ func (v *View) paste(clip string) {
 		v.Cursor.DeleteSelection()
 		v.Cursor.ResetSelection()
 	}
-	
+
 	v.Buf.Insert(v.Cursor.Loc, clip)
 	// v.Cursor.Loc = v.Cursor.Loc.Move(Count(clip), v.Buf)
 	v.freshClip = false
@@ -607,6 +610,11 @@ func (v *View) HandleEvent(event tcell.Event) {
 		if v.Completer.HandleEvent(e.Key()) {
 			// The completer has taken over the key, so break.
 			break
+		}
+		if v.handler != nil {
+			if v.handler(e) {
+				break
+			}
 		}
 
 		// Check first if input is a key binding, if it is we 'eat' the input and don't insert a rune

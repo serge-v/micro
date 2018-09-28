@@ -369,7 +369,7 @@ func (c *Completer) Display() {
 
 		// Draw the runes.
 		for ix, r := range padRight(o.Text(), width+1) {
-			x := start.X + ix
+			x := 120 + ix
 			c.Setter(x, y, r, nil, style)
 		}
 	}

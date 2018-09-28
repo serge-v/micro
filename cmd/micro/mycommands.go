@@ -7,16 +7,20 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/zyedidia/tcell"
 )
 
 func addMyCommands(m map[string]StrCommand) {
 	commandActions["GoInstall"] = goInstall
 	commandActions["GoDef"] = goDef
 	commandActions["SelectNext"] = selectNext
+	commandActions["OpenCur"] = openCur
 
 	m["goinstall"] = StrCommand{"GoInstall", []Completion{NoCompletion}}
 	m["godef"] = StrCommand{"GoDef", []Completion{NoCompletion}}
 	m["selectnext"] = StrCommand{"SelectNext", []Completion{NoCompletion}}
+	m["opencur"] = StrCommand{"OpenCur", []Completion{NoCompletion}}
 }
 
 /*
@@ -27,6 +31,78 @@ func goDef(args []string) {
 func (v *View) goDef(usePlugin bool) bool {
 }
 */
+
+func openCur(args []string) {
+	CurView().openCur(false)
+}
+
+var findstr = ""
+var lsout []byte
+var filerOpened bool
+
+func handleFilerEvent(v *View, e *tcell.EventKey) bool {
+	log.Printf("e: %+v", e)
+
+	switch e.Key() {
+	case tcell.KeyEsc:
+		findstr = ""
+		v.Quit(false)
+		return true
+	case tcell.KeyDEL:
+		if len(findstr) > 0 {
+			findstr = findstr[:len(findstr)-1]
+		}
+	case tcell.KeyRune:
+		if e.Modifiers()&tcell.ModAlt == tcell.ModAlt && e.Rune() == 'o' {
+			v.Quit(false)
+			return true
+		}
+		findstr += string(e.Rune())
+	case tcell.KeyEnter:
+		c := v.Cursor
+		line := v.Buf.Line(c.Y)
+		v.Quit(false)
+		v.AddTab(false)
+		CurView().Open(line)
+		return true
+	default:
+		return false
+	}
+
+	lines := strings.Split(string(lsout), "\n")
+	filtered := make([]string, 0, len(lines))
+	messenger.Message("filter: ", findstr, len(filtered))
+
+	for _, ln := range lines {
+		if findstr != "" && !strings.HasPrefix(ln, findstr) {
+			continue
+		}
+		filtered = append(filtered, ln)
+	}
+	text := strings.Join(filtered, "\n")
+	b := NewBufferFromString(text, "")
+	v.OpenBuffer(b)
+	v.Type.Readonly = true
+	filerOpened = true
+
+	return true
+}
+
+func (v *View) openCur(usePlugin bool) bool {
+	var err error
+	cmd := exec.Command("ls", "-F", "-1")
+	lsout, err = cmd.CombinedOutput()
+	if err != nil {
+		messenger.Error("ls: " + err.Error())
+		return false
+	}
+
+	b := NewBufferFromString(strings.TrimSpace(string(lsout)), "")
+	v.VSplit(b)
+	nv := CurView()
+	nv.handler = func(e *tcell.EventKey) bool { return handleFilerEvent(nv, e) }
+	return true
+}
 
 func goDef(args []string) {
 	CurView().goDef(false)
@@ -135,8 +211,10 @@ func (v *View) goInstall(usePlugin bool) bool {
 	var cmd *exec.Cmd
 	if strings.HasSuffix(v.Buf.Path, "_test.go") {
 		cmd = exec.Command("go", "test", "-c")
+		messenger.Message("go test -c")
 	} else {
 		cmd = exec.Command("go", "install")
+		messenger.Message("go install")
 	}
 	buf, err := cmd.CombinedOutput()
 	if err != nil {

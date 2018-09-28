@@ -123,6 +123,7 @@ var bindingActions = map[string]func(*View, bool) bool{
 	"GoInstall":  (*View).goInstall,
 	"GoDef":      (*View).goDef,
 	"SelectNext": (*View).selectNext,
+	"OpenCur":    (*View).openCur,
 }
 
 var bindingMouse = map[string]tcell.ButtonMask{
