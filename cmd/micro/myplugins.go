@@ -22,6 +22,7 @@ func addMyPlugins(m map[string]StrCommand) {
 	commandActions["SelectNext"] = selectNext
 	commandActions["OpenCur"] = openCur
 	commandActions["WordComplete"] = wordComplete
+	commandActions["FindInFiles"] = findInFiles
 
 	m["goinstall"] = StrCommand{"GoInstall", []Completion{NoCompletion}}
 	m["godef"] = StrCommand{"GoDef", []Completion{NoCompletion}}
@@ -29,6 +30,7 @@ func addMyPlugins(m map[string]StrCommand) {
 	m["selectnext"] = StrCommand{"SelectNext", []Completion{NoCompletion}}
 	m["opencur"] = StrCommand{"OpenCur", []Completion{NoCompletion}}
 	m["wordcomplete"] = StrCommand{"WordComplete", []Completion{NoCompletion}}
+	m["findinfiles"] = StrCommand{"FindInFiles", []Completion{NoCompletion}}
 
 	bindingActions["GoInstall"] = (*View).goInstall
 	bindingActions["GoComplete"] = (*View).goComplete
@@ -36,6 +38,73 @@ func addMyPlugins(m map[string]StrCommand) {
 	bindingActions["SelectNext"] = (*View).selectNext
 	bindingActions["OpenCur"] = (*View).openCur
 	bindingActions["WordComplete"] = (*View).wordComplete
+	bindingActions["FindInFiles"] = (*View).findInFiles
+}
+
+// grep plugin
+
+type grepPlugin struct {
+	v      *View // grep results view
+	target *View // target view to insert completion
+}
+
+func parseGrepLine(s string) errorLine {
+	el := errorLine{}
+
+	cc := strings.SplitN(s, ":", 3)
+	if len(cc) != 3 {
+		return el
+	}
+
+	el.fname = cc[0]
+	el.line, _ = strconv.Atoi(cc[1])
+	el.message = strings.TrimSpace(cc[2])
+
+	return el
+}
+
+func (v *View) findInFiles(usePlugin bool) bool {
+	log.Println("findInFiles command")
+	p := &grepPlugin{}
+	v.Save(false)
+
+	cmd := exec.Command("grep", "Selection", "--exclude-dir", "vendor", "-n", "-R", ".")
+	buf, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Println("build:", err)
+		messenger.Error(err.Error())
+	}
+	b := NewBufferFromString(string(buf), "")
+	v.HSplit(b)
+	p.v = CurView()
+	p.v.Type.Readonly = true
+	p.v.handler = func(e *tcell.EventKey) bool { return p.HandleEvent(e) }
+
+	return true
+}
+
+func (g *grepPlugin) HandleEvent(e *tcell.EventKey) bool {
+	log.Printf("e: %+v", e)
+
+	switch e.Key() {
+	case tcell.KeyEnter:
+		c := g.v.Cursor
+		line := g.v.Buf.Line(c.Y)
+		el := parseGrepLine(line)
+		g.v.gotoError(el)
+		return true
+	case tcell.KeyEsc, tcell.KeyCtrlSpace:
+		g.v.Quit(false)
+		return true
+	default:
+		return false
+	}
+
+	return true
+}
+
+func findInFiles(args []string) {
+	CurView().findInFiles(false)
 }
 
 // WordComplete plugin
@@ -358,6 +427,7 @@ func (v *View) goDef(usePlugin bool) bool {
 	buf := v.Buf
 	loc := Loc{c.X, c.Y}
 	offset := ByteOffset(loc, buf)
+	log.Printf("godef: %+v", loc)
 
 	cmd := exec.Command("godef", "-f", buf.Path, "-o", strconv.Itoa(offset))
 	out, err := cmd.CombinedOutput()
@@ -424,8 +494,20 @@ func (v *View) gotoError(ln errorLine) {
 	errfile, _ := filepath.Abs(ln.fname)
 	currfile, _ := filepath.Abs(v.Buf.Path)
 	if currfile != errfile {
-		v.AddTab(false)
-		CurView().Open(errfile)
+		found := false
+		for i, t := range tabs {
+			currfile, _ = filepath.Abs(t.Views[t.CurView].Buf.Path)
+			if currfile == errfile {
+				found = true
+				log.Println("found:", currfile)
+				curTab = i
+				break
+			}
+		}
+		if !found {
+			v.AddTab(false)
+			CurView().Open(errfile)
+		}
 	}
 	loc := Loc{ln.pos - 1, ln.line - 1}
 	CurView().Cursor.GotoLoc(loc)
