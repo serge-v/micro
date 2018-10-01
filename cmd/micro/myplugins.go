@@ -65,16 +65,25 @@ func parseGrepLine(s string) errorLine {
 
 func (v *View) findInFiles(usePlugin bool) bool {
 	log.Println("findInFiles command")
+	sel := v.Cursor.GetSelection()
+	if sel == "" {
+		v.Cursor.SelectWord()
+		sel = v.Cursor.GetSelection()
+	}
+	if sel == "" {
+		return true
+	}
+
 	p := &grepPlugin{}
 	v.Save(false)
 
-	cmd := exec.Command("grep", "Selection", "--exclude-dir", "vendor", "-n", "-R", ".")
+	cmd := exec.Command("grep", sel, "-m", "20", "--exclude-dir", "vendor", "-n", "-R", ".")
 	buf, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Println("build:", err)
 		messenger.Error(err.Error())
 	}
-	b := NewBufferFromString(string(buf), "")
+	b := NewBufferFromString(strings.TrimSpace(string(buf)), "")
 	v.HSplit(b)
 	p.v = CurView()
 	p.v.Type.Readonly = true
@@ -326,6 +335,9 @@ func (v *View) goComplete(usePlugin bool) bool {
 
 	for _, ln := range strings.Split(string(out), "\n") {
 		s := strings.TrimSpace(ln)
+		if s == "" {
+			continue
+		}
 		if strings.HasPrefix(s, "Found ") {
 			continue
 		}
