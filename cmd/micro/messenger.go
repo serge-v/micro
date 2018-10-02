@@ -10,8 +10,8 @@ import (
 	"strconv"
 
 	"github.com/mattn/go-runewidth"
-	"github.com/serge-v/micro/cmd/micro/shellwords"
 	"github.com/zyedidia/clipboard"
+	"github.com/zyedidia/micro/cmd/micro/shellwords"
 	"github.com/zyedidia/tcell"
 )
 

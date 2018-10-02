@@ -6,7 +6,7 @@ import (
 	"io"
 	"unicode/utf8"
 
-	"github.com/serge-v/micro/cmd/micro/highlight"
+	"github.com/zyedidia/micro/cmd/micro/highlight"
 )
 
 func runeToByteIndex(n int, txt []byte) int {

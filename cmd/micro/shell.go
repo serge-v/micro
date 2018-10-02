@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"strings"
 
-	"github.com/serge-v/micro/cmd/micro/shellwords"
+	"github.com/zyedidia/micro/cmd/micro/shellwords"
 )
 
 // ExecCommand executes a command using exec
