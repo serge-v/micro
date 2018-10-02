@@ -7,7 +7,7 @@ rules:
     # Conditionals and control flow
     - special: "\\b(break|case|continue|default|go|goto|range|return|println)\\b"
     - statement: "\\b(else|for|if|switch|select)\\b"
-    - preproc: "\\b(package|import|const|var|type|struct|func|go|defer|iota)\\b"
+    - preproc: "\\b(package|import|const|var|type|struct|func|go|defer|iota|make|new)\\b"
     - symbol.operator: "[-+/*=<>!~%&|^]|:="
 
       # Types

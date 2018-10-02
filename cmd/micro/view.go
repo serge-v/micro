@@ -102,9 +102,6 @@ type View struct {
 	// The scrollbar
 	scrollbar *ScrollBar
 
-	// Autocomplete function
-	Completer *Completer
-
 	// Virtual terminal
 	term *Terminal
 
@@ -156,9 +153,6 @@ func NewViewWidthHeight(buf *Buffer, w, h int) *View {
 			continue
 		}
 	}
-
-	// Load the autocompleter, based on the filetype.
-	v.Completer = NewCompleterForView(v)
 
 	return v
 }
@@ -606,11 +600,6 @@ func (v *View) HandleEvent(event tcell.Event) {
 			}
 		}
 	case *tcell.EventKey:
-		// See whether the autocomplete should take over the keys.
-		if v.Completer.HandleEvent(e.Key()) {
-			// The completer has taken over the key, so break.
-			break
-		}
 		if v.handler != nil {
 			if v.handler(e) {
 				break
@@ -661,12 +650,6 @@ func (v *View) HandleEvent(event tcell.Event) {
 						v.Buf.Replace(v.Cursor.Loc, next, string(e.Rune()))
 					} else {
 						v.Buf.Insert(v.Cursor.Loc, string(e.Rune()))
-					}
-
-					// Allow the completer to access the rune.
-					err := v.Completer.Process(e.Rune())
-					if err != nil {
-						TermMessage(err)
 					}
 
 					for pl := range loadedPlugins {
@@ -761,10 +744,6 @@ func (v *View) HandleEvent(event tcell.Event) {
 		// This is (hopefully) a temporary solution
 		v.Relocate()
 	}
-
-	// Check to see whether the cursor has moved out of the autocomplete range,
-	// and the completer should exit.
-	v.Completer.DeactivateIfOutOfBounds()
 }
 
 func (v *View) mainCursor() bool {
@@ -1107,9 +1086,6 @@ func (v *View) DisplayView() {
 			screen.SetContent(v.x, yOffset+i, '|', nil, dividerStyle.Reverse(true))
 		}
 	}
-
-	// Draw the autocomplete display on top of everything.
-	v.Completer.Display()
 }
 
 // ShowMultiCursor will display a cursor at a location
