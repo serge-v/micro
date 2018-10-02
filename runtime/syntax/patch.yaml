@@ -2,6 +2,7 @@ filetype: patch
 
 detect: 
     filename: "\\.(patch|diff)$"
+    header: "^diff --git "
 
 rules:
     - brightgreen: "^\\+.*"
