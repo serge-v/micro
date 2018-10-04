@@ -15,30 +15,28 @@ import (
 	"github.com/zyedidia/tcell"
 )
 
+type pluginDef struct {
+	Action string
+	Func   func(*View, bool) bool
+}
+
+var plugins = []pluginDef{
+	{"GoInstall", (*View).goInstall},
+	{"GoDef", (*View).goDef},
+	{"GoComplete", (*View).goComplete},
+	{"SelectNext", (*View).selectNext},
+	{"OpenCur", (*View).openCur},
+	{"WoldComplete", (*View).wordComplete},
+	{"FindInFiles", (*View).findInFiles},
+	{"SetJumpMode", (*View).setJumpMode},
+}
+
 func addMyPlugins(m map[string]StrCommand) {
-	commandActions["GoInstall"] = goInstall
-	commandActions["GoDef"] = goDef
-	commandActions["GoComplete"] = goComplete
-	commandActions["SelectNext"] = selectNext
-	commandActions["OpenCur"] = openCur
-	commandActions["WordComplete"] = wordComplete
-	commandActions["FindInFiles"] = findInFiles
-
-	m["goinstall"] = StrCommand{"GoInstall", []Completion{NoCompletion}}
-	m["godef"] = StrCommand{"GoDef", []Completion{NoCompletion}}
-	m["gocomplete"] = StrCommand{"GoComplete", []Completion{NoCompletion}}
-	m["selectnext"] = StrCommand{"SelectNext", []Completion{NoCompletion}}
-	m["opencur"] = StrCommand{"OpenCur", []Completion{NoCompletion}}
-	m["wordcomplete"] = StrCommand{"WordComplete", []Completion{NoCompletion}}
-	m["findinfiles"] = StrCommand{"FindInFiles", []Completion{NoCompletion}}
-
-	bindingActions["GoInstall"] = (*View).goInstall
-	bindingActions["GoComplete"] = (*View).goComplete
-	bindingActions["GoDef"] = (*View).goDef
-	bindingActions["SelectNext"] = (*View).selectNext
-	bindingActions["OpenCur"] = (*View).openCur
-	bindingActions["WordComplete"] = (*View).wordComplete
-	bindingActions["FindInFiles"] = (*View).findInFiles
+	for _, p := range plugins {
+		commandActions[p.Action] = func(args []string) { p.Func(CurView(), false) }
+		m[strings.ToLower(p.Action)] = StrCommand{p.Action, []Completion{NoCompletion}}
+		bindingActions[p.Action] = p.Func
+	}
 }
 
 // grep plugin
@@ -51,14 +49,19 @@ type grepPlugin struct {
 func parseGrepLine(s string) errorLine {
 	el := errorLine{}
 
-	cc := strings.SplitN(s, ":", 3)
-	if len(cc) != 3 {
+	cc := strings.Split(s, ":")
+	if len(cc) < 3 {
 		return el
 	}
 
 	el.fname = cc[0]
 	el.line, _ = strconv.Atoi(cc[1])
-	el.message = strings.TrimSpace(cc[2])
+	if len(cc) == 4 {
+		el.pos, _ = strconv.Atoi(cc[2])
+		el.message = strings.TrimSpace(cc[3])
+	} else {
+		el.message = strings.TrimSpace(cc[2])
+	}
 
 	return el
 }
@@ -77,7 +80,7 @@ func (v *View) findInFiles(usePlugin bool) bool {
 	p := &grepPlugin{}
 	v.Save(false)
 
-	cmd := exec.Command("grep", sel, "-m", "20", "--exclude-dir", "vendor", "-n", "-R", ".")
+	cmd := exec.Command("grep", sel, "-m", "100", "--exclude-dir", "vendor", "-n", "-R", ".")
 	buf, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Println("build:", err)
@@ -110,10 +113,6 @@ func (g *grepPlugin) HandleEvent(e *tcell.EventKey) bool {
 	}
 
 	return true
-}
-
-func findInFiles(args []string) {
-	CurView().findInFiles(false)
 }
 
 // WordComplete plugin
@@ -165,10 +164,6 @@ func (g *wordcompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 	log.Println("filter:", g.filter, "words:", len(g.words), "filtered:", len(words))
 
 	return true
-}
-
-func wordComplete(args []string) {
-	CurView().wordComplete(false)
 }
 
 func getWords(r io.Reader) []string {
@@ -309,10 +304,6 @@ func (g *gocompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 	return true
 }
 
-func goComplete(args []string) {
-	CurView().goComplete(false)
-}
-
 func (v *View) goComplete(usePlugin bool) bool {
 	buf := v.Buf
 	if buf.FileType() != "go" {
@@ -351,10 +342,6 @@ func (v *View) goComplete(usePlugin bool) bool {
 	g.v.handler = func(e *tcell.EventKey) bool { return g.HandleEvent(e) }
 
 	return true
-}
-
-func openCur(args []string) {
-	CurView().openCur(false)
 }
 
 type fileopenerPlugin struct {
@@ -430,10 +417,6 @@ func (v *View) openCur(usePlugin bool) bool {
 	return true
 }
 
-func goDef(args []string) {
-	CurView().goDef(false)
-}
-
 func (v *View) goDef(usePlugin bool) bool {
 	c := v.Cursor
 	buf := v.Buf
@@ -467,10 +450,6 @@ func (v *View) goDef(usePlugin bool) bool {
 	return true
 }
 
-func selectNext(args []string) {
-	CurView().selectNext(false)
-}
-
 func (v *View) selectNext(usePlugin bool) bool {
 	c := v.Cursor
 	w := c.GetSelection()
@@ -480,7 +459,6 @@ func (v *View) selectNext(usePlugin bool) bool {
 		return true
 	}
 	c.SelectWord()
-
 	return true
 }
 
@@ -495,11 +473,6 @@ var goinstallPlugin struct {
 	lines      []errorLine
 	cur        int
 	hasNextErr bool
-}
-
-func goInstall(args []string) {
-	log.Println("goInstall command")
-	CurView().goInstall(false)
 }
 
 func (v *View) gotoError(ln errorLine) {
@@ -596,5 +569,40 @@ func (v *View) goInstall(usePlugin bool) bool {
 		messenger.Message("no errors")
 	}
 	log.Println("err lines:", len(p.lines))
+	return true
+}
+
+type setmodePlugin struct {
+	v *View
+}
+
+func (v *View) setJumpMode(usePlugin bool) bool {
+	log.Println("setJumpMode command")
+	p := &setmodePlugin{}
+	p.v = CurView()
+	p.v.Type.Readonly = true
+	p.v.handler = func(e *tcell.EventKey) bool { return p.HandleEvent(e) }
+	return true
+}
+
+func (g *setmodePlugin) HandleEvent(e *tcell.EventKey) bool {
+	log.Printf("e: %+v", e)
+
+	switch e.Key() {
+	case tcell.KeyEnter:
+		c := g.v.Cursor
+		line := g.v.Buf.Line(c.Y)
+		if line == "" {
+			return true
+		}
+		el := parseGrepLine(line)
+		if el.fname == "" {
+			return true
+		}
+		g.v.gotoError(el)
+		return true
+	default:
+		return false
+	}
 	return true
 }
