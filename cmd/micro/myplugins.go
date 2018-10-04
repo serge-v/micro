@@ -86,7 +86,9 @@ func (v *View) findInFiles(usePlugin bool) bool {
 	}
 
 	p := &grepPlugin{}
-	v.Save(false)
+	if !strings.HasPrefix(v.Buf.Path, "Find: ") {
+		v.Save(false)
+	}
 
 	cmd := exec.Command("grep", sel, "-m", "100", "--exclude-dir", "vendor", "-n", "-R", ".")
 	buf, err := cmd.CombinedOutput()
@@ -94,7 +96,7 @@ func (v *View) findInFiles(usePlugin bool) bool {
 		log.Println("build:", err)
 		messenger.Error(err.Error())
 	}
-	b := NewBufferFromString(strings.TrimSpace(string(buf)), "")
+	b := NewBufferFromString(strings.TrimSpace(string(buf)), "Find: "+sel)
 	v.HSplit(b)
 	p.v = CurView()
 	p.v.Type.Readonly = true
