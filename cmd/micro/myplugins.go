@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -12,6 +14,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/fatih/motion/astcontext"
 	"github.com/zyedidia/tcell"
 )
 
@@ -23,19 +26,24 @@ type pluginDef struct {
 var plugins = []pluginDef{
 	{"GoInstall", (*View).goInstall},
 	{"GoDef", (*View).goDef},
+	{"GoDecls", (*View).goDecls},
 	{"GoComplete", (*View).goComplete},
 	{"SelectNext", (*View).selectNext},
 	{"OpenCur", (*View).openCur},
-	{"WoldComplete", (*View).wordComplete},
+	{"WordComplete", (*View).wordComplete},
 	{"FindInFiles", (*View).findInFiles},
 	{"SetJumpMode", (*View).setJumpMode},
 }
 
 func addMyPlugins(m map[string]StrCommand) {
 	for _, p := range plugins {
-		commandActions[p.Action] = func(args []string) { p.Func(CurView(), false) }
+		f := p.Func
+		commandActions[p.Action] = func(args []string) {
+			log.Println("command:", p.Action)
+			f(CurView(), false)
+		}
 		m[strings.ToLower(p.Action)] = StrCommand{p.Action, []Completion{NoCompletion}}
-		bindingActions[p.Action] = p.Func
+		bindingActions[p.Action] = f
 	}
 }
 
@@ -586,8 +594,6 @@ func (v *View) setJumpMode(usePlugin bool) bool {
 }
 
 func (g *setmodePlugin) HandleEvent(e *tcell.EventKey) bool {
-	log.Printf("e: %+v", e)
-
 	switch e.Key() {
 	case tcell.KeyEnter:
 		c := g.v.Cursor
@@ -604,5 +610,99 @@ func (g *setmodePlugin) HandleEvent(e *tcell.EventKey) bool {
 	default:
 		return false
 	}
+	return true
+}
+
+// godecls plugin
+
+type godeclsPlugin struct {
+	v      *View
+	target *View
+	filter string
+	decls  []astcontext.Decl
+}
+
+func (v *View) goDecls(usePlugin bool) bool {
+	log.Println("godecls command")
+	p := &godeclsPlugin{
+		target: v,
+	}
+	v.Save(false)
+	cmd := exec.Command("motion", "-file", v.Buf.Path, "-mode", "decls", "-include", "func,type")
+	buf, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Println("motion:", err)
+		messenger.Error(err.Error())
+		return true
+	}
+	var res astcontext.Result
+	if err = json.Unmarshal(buf, &res); err != nil {
+		log.Println("motion:", err)
+		messenger.Error(err.Error())
+		return true
+	}
+
+	var w bytes.Buffer
+	for _, d := range res.Decls {
+		fmt.Fprintf(&w, "%4d: %s\n", d.Line, d.Full)
+	}
+	p.decls = res.Decls
+
+	b := NewBufferFromString(strings.TrimSuffix(w.String(), "\n"), "")
+	v.HSplit(b)
+	p.v = CurView()
+	p.v.Type.Readonly = true
+	p.v.handler = func(e *tcell.EventKey) bool { return p.HandleEvent(e) }
+
+	return true
+}
+
+func (g *godeclsPlugin) HandleEvent(e *tcell.EventKey) bool {
+	log.Printf("e: %+v", e)
+
+	switch e.Key() {
+	case tcell.KeyRune:
+		if e.Modifiers()&tcell.ModAlt == tcell.ModAlt {
+			g.v.Quit(false)
+			return true
+		}
+		g.filter += string(e.Rune())
+	case tcell.KeyDEL:
+		if len(g.filter) > 0 {
+			g.filter = g.filter[:len(g.filter)-1]
+		}
+	case tcell.KeyEnter:
+		c := g.v.Cursor
+		line := g.v.Buf.Line(c.Y)
+		g.v.Quit(false)
+		cc := strings.SplitN(strings.TrimSpace(line), ":", 2)
+		if len(cc) == 2 {
+			ln, _ := strconv.Atoi(cc[0])
+			el := errorLine{
+				fname:   g.target.Buf.Path,
+				line:    ln,
+				message: cc[1],
+			}
+			log.Printf("goto: %+v, cc: %+v", el, cc)
+			g.target.gotoError(el)
+		}
+		return true
+	case tcell.KeyEsc, tcell.KeyCtrlSpace:
+		g.v.Quit(false)
+		return true
+	default:
+		return false
+	}
+
+	var w bytes.Buffer
+	for _, d := range g.decls {
+		if strings.Contains(strings.ToLower(d.Ident), g.filter) {
+			fmt.Fprintf(&w, "%4d: %s\n", d.Line, d.Full)
+		}
+	}
+	b := NewBufferFromString(strings.TrimSuffix(w.String(), "\n"), "")
+	g.v.OpenBuffer(b)
+	g.v.Type.Readonly = true
+
 	return true
 }
