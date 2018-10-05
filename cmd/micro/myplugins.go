@@ -23,7 +23,7 @@ type pluginDef struct {
 	Func   func(*View, bool) bool
 }
 
-var plugins = []pluginDef{
+var myPlugins = []pluginDef{
 	{"GoInstall", (*View).goInstall},
 	{"GoDef", (*View).goDef},
 	{"GoDecls", (*View).goDecls},
@@ -36,7 +36,7 @@ var plugins = []pluginDef{
 }
 
 func addMyPlugins(m map[string]StrCommand) {
-	for _, p := range plugins {
+	for _, p := range myPlugins {
 		f := p.Func
 		commandActions[p.Action] = func(args []string) {
 			log.Println("command:", p.Action)
@@ -44,6 +44,15 @@ func addMyPlugins(m map[string]StrCommand) {
 		}
 		m[strings.ToLower(p.Action)] = StrCommand{p.Action, []Completion{NoCompletion}}
 		bindingActions[p.Action] = f
+	}
+}
+
+func myPluginsPostAction(funcName string, view *View, args ...interface{}) {
+	log.Println("postaction:", funcName, "type:", view.Buf.FileType())
+
+	if strings.HasSuffix(view.Buf.Path, ".err") {
+		view.Buf.Settings["filetype"] = "err"
+		view.setJumpMode(false)
 	}
 }
 
@@ -100,6 +109,7 @@ func (v *View) findInFiles(usePlugin bool) bool {
 	v.HSplit(b)
 	p.v = CurView()
 	p.v.Type.Readonly = true
+	p.v.Type.Scratch = true
 	p.v.handler = func(e *tcell.EventKey) bool { return p.HandleEvent(e) }
 
 	return true
@@ -171,6 +181,7 @@ func (g *wordcompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 	b := NewBufferFromString(strings.Join(words, "\n"), "")
 	g.v.OpenBuffer(b)
 	g.v.Type.Readonly = true
+	g.v.Type.Scratch = true
 	log.Println("filter:", g.filter, "words:", len(g.words), "filtered:", len(words))
 
 	return true
@@ -231,6 +242,7 @@ func (v *View) wordComplete(usePlugin bool) bool {
 	v.VSplit(b)
 	g.v = CurView()
 	g.v.Type.Readonly = true
+	g.v.Type.Scratch = true
 	g.v.handler = func(e *tcell.EventKey) bool { return g.HandleEvent(e) }
 
 	return true
@@ -310,6 +322,7 @@ func (g *gocompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 	b := NewBufferFromString(text, "")
 	g.v.OpenBuffer(b)
 	g.v.Type.Readonly = true
+	g.v.Type.Scratch = true
 
 	return true
 }
@@ -349,6 +362,7 @@ func (v *View) goComplete(usePlugin bool) bool {
 	v.VSplit(b)
 	g.v = CurView()
 	g.v.Type.Readonly = true
+	g.v.Type.Scratch = true
 	g.v.handler = func(e *tcell.EventKey) bool { return g.HandleEvent(e) }
 
 	return true
@@ -403,6 +417,7 @@ func (g *fileopenerPlugin) HandleEvent(e *tcell.EventKey) bool {
 	b := NewBufferFromString(text, "")
 	g.v.OpenBuffer(b)
 	g.v.Type.Readonly = true
+	g.v.Type.Scratch = true
 
 	return true
 }
@@ -591,6 +606,7 @@ func (v *View) setJumpMode(usePlugin bool) bool {
 	p := &setmodePlugin{}
 	p.v = CurView()
 	p.v.Type.Readonly = true
+	p.v.Type.Scratch = true
 	p.v.handler = func(e *tcell.EventKey) bool { return p.HandleEvent(e) }
 	return true
 }
@@ -646,7 +662,7 @@ func (v *View) goDecls(usePlugin bool) bool {
 
 	var w bytes.Buffer
 	for _, d := range res.Decls {
-		fmt.Fprintf(&w, "%4d: %s\n", d.Line, d.Full)
+		_, _ = fmt.Fprintf(&w, "%4d: %s\n", d.Line, d.Full)
 	}
 	p.decls = res.Decls
 
@@ -654,6 +670,7 @@ func (v *View) goDecls(usePlugin bool) bool {
 	v.HSplit(b)
 	p.v = CurView()
 	p.v.Type.Readonly = true
+	p.v.Type.Scratch = true
 	p.v.handler = func(e *tcell.EventKey) bool { return p.HandleEvent(e) }
 
 	return true
@@ -699,12 +716,13 @@ func (g *godeclsPlugin) HandleEvent(e *tcell.EventKey) bool {
 	var w bytes.Buffer
 	for _, d := range g.decls {
 		if strings.Contains(strings.ToLower(d.Ident), g.filter) {
-			fmt.Fprintf(&w, "%4d: %s\n", d.Line, d.Full)
+			_, _ = fmt.Fprintf(&w, "%4d: %s\n", d.Line, d.Full)
 		}
 	}
 	b := NewBufferFromString(strings.TrimSuffix(w.String(), "\n"), "")
 	g.v.OpenBuffer(b)
 	g.v.Type.Readonly = true
+	g.v.Type.Scratch = true
 
 	return true
 }

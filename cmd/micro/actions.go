@@ -44,6 +44,7 @@ func PostActionCall(funcName string, view *View, args ...interface{}) bool {
 			relocate = false
 		}
 	}
+	myPluginsPostAction(funcName, view, args)
 	return relocate
 }
 
