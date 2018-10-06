@@ -1,5 +1,7 @@
 package main
 
+// myplugings is a set of experimental addons for golang development.
+
 import (
 	"bufio"
 	"bytes"
@@ -19,20 +21,37 @@ import (
 )
 
 type pluginDef struct {
-	Action string
-	Key    string
-	Func   func(*View, bool) bool
+	Action string                 // micro action name
+	Key    string                 // key binding
+	Func   func(*View, bool) bool // binding handler
 }
 
 var myPlugins = []pluginDef{
+	// Run go install and cycle thru the errors.
 	{"GoInstall", "Alti", (*View).goInstall},
+
+	// Go to symbol definition.
 	{"GoDef", "Alt]", (*View).goDef},
+
+	// List go definitions for the current file in the split view.
 	{"GoDecls", "Altt", (*View).goDecls},
+
+	// Show go completions in the split view.
 	{"GoComplete", "CtrlSpace", (*View).goComplete},
+
+	// Find next occurence of word under cursor.
 	{"SelectNext", "Altl", (*View).selectNext},
+
+	// Show file list from the current directory in the split view.
 	{"OpenCur", "Alto", (*View).openCur},
+
+	// Show word completions for the current file in the split view.
 	{"WordComplete", "Alt'", (*View).wordComplete},
+
+	// Find word under cursor in all files. Show results in the split view.
 	{"FindInFiles", "", (*View).findInFiles},
+
+	// Set buffer mode to jump to the file on the enter key.
 	{"SetJumpMode", "", (*View).setJumpMode},
 }
 
@@ -193,6 +212,7 @@ func (g *wordcompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 	g.v.OpenBuffer(b)
 	g.v.Type.Readonly = true
 	g.v.Type.Scratch = true
+	SetLocal([]string{"ruler", "off"})
 	log.Println("filter:", g.filter, "words:", len(g.words), "filtered:", len(words))
 
 	return true
@@ -250,6 +270,7 @@ func (v *View) wordComplete(usePlugin bool) bool {
 	g.v = CurView()
 	g.v.Type.Readonly = true
 	g.v.Type.Scratch = true
+	SetLocal([]string{"ruler", "off"})
 	g.v.handler = func(e *tcell.EventKey) bool { return g.HandleEvent(e) }
 
 	return true
@@ -281,6 +302,16 @@ func (g *gocompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 
 	switch e.Key() {
 	case tcell.KeyRune:
+		if e.Rune() == '-' {
+			g.v.x++
+			g.v.Width--
+			return true
+		}
+		if e.Rune() == '=' {
+			g.v.x--
+			g.v.Width++
+			return true
+		}
 		g.filter += string(e.Rune())
 	case tcell.KeyDEL:
 		if len(g.filter) > 0 {
@@ -290,7 +321,9 @@ func (g *gocompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 		c := g.v.Cursor
 		line := g.v.Buf.Line(c.Y)
 		g.v.Quit(false)
-		fields := strings.Fields(line)
+		fields := strings.FieldsFunc(line, func(r rune) bool {
+			return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+		})
 		if len(fields) < 2 {
 			return true
 		}
@@ -298,9 +331,10 @@ func (g *gocompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 		c = g.target.Cursor
 		targetLine := g.target.Buf.Line(c.Y)
 		prefix := getLeftChunk(targetLine, c.X)
-		line = fields[1]
-		line = strings.TrimPrefix(line, prefix)
-		g.target.Buf.Insert(Loc{c.X, c.Y}, line)
+		ident := fields[1]
+		ident = strings.TrimPrefix(ident, prefix)
+		g.target.Buf.Insert(Loc{c.X, c.Y}, ident)
+		messenger.Message(line)
 		return true
 	case tcell.KeyEsc, tcell.KeyCtrlSpace:
 		g.v.Quit(false)
@@ -328,7 +362,8 @@ func (g *gocompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 	text := strings.Join(filtered, "\n")
 	b := NewBufferFromString(text, "")
 	g.v.OpenBuffer(b)
-	b.Settings["filetype"] = "go"
+	SetLocal([]string{"filetype", "go"})
+	SetLocal([]string{"ruler", "off"})
 	g.v.Type.Readonly = true
 	g.v.Type.Scratch = true
 
@@ -369,7 +404,8 @@ func (v *View) goComplete(usePlugin bool) bool {
 	b := NewBufferFromString(strings.Join(g.lines, "\n"), "")
 	v.VSplit(b)
 	g.v = CurView()
-	b.Settings["filetype"] = "go"
+	SetLocal([]string{"filetype", "go"})
+	SetLocal([]string{"ruler", "off"})
 	g.v.Type.Readonly = true
 	g.v.Type.Scratch = true
 	g.v.handler = func(e *tcell.EventKey) bool { return g.HandleEvent(e) }
