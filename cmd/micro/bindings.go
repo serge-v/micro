@@ -295,7 +295,7 @@ func InitBindings() {
 			TermMessage("Error reading bindings.json:", err.Error())
 		}
 	}
-
+	bindMyKeys(defaults)
 	parseBindings(defaults)
 	parseBindings(parsed)
 }

@@ -20,19 +20,20 @@ import (
 
 type pluginDef struct {
 	Action string
+	Key    string
 	Func   func(*View, bool) bool
 }
 
 var myPlugins = []pluginDef{
-	{"GoInstall", (*View).goInstall},
-	{"GoDef", (*View).goDef},
-	{"GoDecls", (*View).goDecls},
-	{"GoComplete", (*View).goComplete},
-	{"SelectNext", (*View).selectNext},
-	{"OpenCur", (*View).openCur},
-	{"WordComplete", (*View).wordComplete},
-	{"FindInFiles", (*View).findInFiles},
-	{"SetJumpMode", (*View).setJumpMode},
+	{"GoInstall", "Alti", (*View).goInstall},
+	{"GoDef", "Alt]", (*View).goDef},
+	{"GoDecls", "Altt", (*View).goDecls},
+	{"GoComplete", "CtrlSpace", (*View).goComplete},
+	{"SelectNext", "Altl", (*View).selectNext},
+	{"OpenCur", "Alto", (*View).openCur},
+	{"WordComplete", "Alt'", (*View).wordComplete},
+	{"FindInFiles", "", (*View).findInFiles},
+	{"SetJumpMode", "", (*View).setJumpMode},
 }
 
 func addMyPlugins(m map[string]StrCommand) {
@@ -45,6 +46,16 @@ func addMyPlugins(m map[string]StrCommand) {
 		m[strings.ToLower(p.Action)] = StrCommand{p.Action, []Completion{NoCompletion}}
 		bindingActions[p.Action] = f
 	}
+}
+
+func bindMyKeys(def map[string]string) {
+	for _, p := range myPlugins {
+		if p.Key != "" {
+			def[p.Key] = p.Action
+		}
+	}
+	def["CtrlLeft"] = "PreviousTab"
+	def["CtrlRight"] = "NextTab"
 }
 
 func myPluginsPostAction(funcName string, view *View, args ...interface{}) {
@@ -215,7 +226,8 @@ func getWords(r io.Reader) []string {
 func getFiltered(words []string, prefix string) []string {
 	var res []string
 	for _, w := range words {
-		if strings.HasPrefix(w, prefix) {
+		low := strings.ToLower(w)
+		if strings.Contains(low, prefix) {
 			res = append(res, w)
 		}
 	}
@@ -223,11 +235,6 @@ func getFiltered(words []string, prefix string) []string {
 }
 
 func (v *View) wordComplete(usePlugin bool) bool {
-	buf := v.Buf
-	if buf.FileType() != "go" {
-		return false
-	}
-
 	c := v.Cursor
 	line := v.Buf.Line(c.Y)
 
@@ -311,7 +318,7 @@ func (g *gocompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 		if len(fields) > 1 {
 			ls = strings.Join(fields[1:], " ")
 		}
-		if g.filter != "" && !strings.HasPrefix(ls, g.filter) {
+		if g.filter != "" && !strings.Contains(ls, g.filter) {
 			continue
 		}
 		filtered = append(filtered, ln)
@@ -321,6 +328,7 @@ func (g *gocompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 	text := strings.Join(filtered, "\n")
 	b := NewBufferFromString(text, "")
 	g.v.OpenBuffer(b)
+	b.Settings["filetype"] = "go"
 	g.v.Type.Readonly = true
 	g.v.Type.Scratch = true
 
@@ -361,6 +369,7 @@ func (v *View) goComplete(usePlugin bool) bool {
 	b := NewBufferFromString(strings.Join(g.lines, "\n"), "")
 	v.VSplit(b)
 	g.v = CurView()
+	b.Settings["filetype"] = "go"
 	g.v.Type.Readonly = true
 	g.v.Type.Scratch = true
 	g.v.handler = func(e *tcell.EventKey) bool { return g.HandleEvent(e) }
@@ -408,7 +417,7 @@ func (g *fileopenerPlugin) HandleEvent(e *tcell.EventKey) bool {
 	messenger.Message("filter: ", g.filter, len(filtered))
 
 	for _, ln := range lines {
-		if g.filter != "" && !strings.HasPrefix(ln, g.filter) {
+		if g.filter != "" && !strings.Contains(ln, g.filter) {
 			continue
 		}
 		filtered = append(filtered, ln)
@@ -715,7 +724,7 @@ func (g *godeclsPlugin) HandleEvent(e *tcell.EventKey) bool {
 
 	var w bytes.Buffer
 	for _, d := range g.decls {
-		if strings.Contains(strings.ToLower(d.Ident), g.filter) {
+		if strings.Contains(strings.ToLower(d.Full), g.filter) {
 			_, _ = fmt.Fprintf(&w, "%4d: %s\n", d.Line, d.Full)
 		}
 	}
