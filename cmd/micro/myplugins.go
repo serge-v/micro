@@ -432,7 +432,7 @@ func (g *fileopenerPlugin) HandleEvent(e *tcell.EventKey) bool {
 			g.filter = g.filter[:len(g.filter)-1]
 		}
 	case tcell.KeyRune:
-		if e.Modifiers()&tcell.ModAlt == tcell.ModAlt && e.Rune() == 'o' {
+		if e.Modifiers()&tcell.ModAlt == tcell.ModAlt {
 			g.v.Quit(false)
 			return true
 		}
@@ -450,7 +450,7 @@ func (g *fileopenerPlugin) HandleEvent(e *tcell.EventKey) bool {
 
 	lines := strings.Split(string(g.lsout), "\n")
 	filtered := make([]string, 0, len(lines))
-	messenger.Message("filter: ", g.filter, len(filtered))
+	messenger.Message("filter: ", g.filter)
 
 	for _, ln := range lines {
 		if g.filter != "" && !strings.Contains(ln, g.filter) {
@@ -461,6 +461,7 @@ func (g *fileopenerPlugin) HandleEvent(e *tcell.EventKey) bool {
 	text := strings.Join(filtered, "\n")
 	b := NewBufferFromString(text, "")
 	g.v.OpenBuffer(b)
+	SetLocal([]string{"ruler", "off"})
 	g.v.Type.Readonly = true
 	g.v.Type.Scratch = true
 
@@ -482,7 +483,7 @@ func (v *View) openCur(usePlugin bool) bool {
 		v:     CurView(),
 		lsout: lsout,
 	}
-
+	SetLocal([]string{"ruler", "off"})
 	g.v.handler = func(e *tcell.EventKey) bool { return g.HandleEvent(e) }
 	return true
 }
@@ -716,6 +717,8 @@ func (v *View) goDecls(usePlugin bool) bool {
 	p.v = CurView()
 	p.v.Type.Readonly = true
 	p.v.Type.Scratch = true
+	SetLocal([]string{"filetype", "go"})
+	SetLocal([]string{"ruler", "off"})
 	p.v.handler = func(e *tcell.EventKey) bool { return p.HandleEvent(e) }
 
 	return true
@@ -766,6 +769,8 @@ func (g *godeclsPlugin) HandleEvent(e *tcell.EventKey) bool {
 	}
 	b := NewBufferFromString(strings.TrimSuffix(w.String(), "\n"), "")
 	g.v.OpenBuffer(b)
+	SetLocal([]string{"filetype", "go"})
+	SetLocal([]string{"ruler", "off"})
 	g.v.Type.Readonly = true
 	g.v.Type.Scratch = true
 
