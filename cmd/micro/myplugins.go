@@ -80,7 +80,7 @@ func bindMyKeys(def map[string]string) {
 func myPluginsPostAction(funcName string, view *View, args ...interface{}) {
 	log.Println("postaction:", funcName, "type:", view.Buf.FileType())
 
-	if strings.HasSuffix(view.Buf.Path, ".err") {
+	if funcName == "OpenFile" && strings.HasSuffix(view.Buf.Path, ".err") {
 		view.Buf.Settings["filetype"] = "err"
 		view.setJumpMode(false)
 	}

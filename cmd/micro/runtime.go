@@ -39,6 +39,7 @@
 // runtime/help/gimmickcolors.md
 // runtime/help/help.md
 // runtime/help/keybindings.md
+// runtime/help/myplugins.md
 // runtime/help/options.md
 // runtime/help/plugins.md
 // runtime/help/tutorial.md
@@ -1010,6 +1011,26 @@ func runtimeHelpKeybindingsMd() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "runtime/help/keybindings.md", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _runtimeHelpMypluginsMd = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x84\x91\x41\x4b\xfc\x40\x0c\xc5\xef\xfd\x14\x81\xff\x71\xf9\xd7\xcf\x20\x2b\x78\x10\x51\xdc\xb3\x87\x3a\x93\x76\x23\xd3\x64\xc8\xa4\xae\x85\x7e\x78\x99\x76\xa7\x6e\x61\xd5\xd0\xcb\x1b\x78\xbf\xbe\xbc\xfc\x83\xc7\x11\x9e\xc3\xd0\x11\xa7\xaa\x9a\xe0\x01\x47\x28\x33\xc1\x5e\xfa\xbe\x61\xbf\x88\x3b\x4c\x4e\x29\x1a\x09\x57\xd3\xff\xcb\x99\x7e\x14\x7f\xcd\x54\x4d\x70\x1b\x6c\x47\xeb\x2f\x3b\x21\x4e\xd6\x84\x90\xc5\xcb\xc0\xd0\x09\x94\x17\x51\xe8\xc4\x04\xf2\x77\x44\x60\xfc\x34\x40\x55\xd1\xec\x3c\x93\x5e\x2f\x48\x1e\xdb\x22\xee\x67\x57\x1a\xfb\x37\x09\xe0\xb1\x25\xa6\xbc\x08\x5c\x99\x42\xb2\x0d\xc9\x85\xb4\x88\xc3\x51\x4e\x90\x75\xa3\x4d\x46\x24\x68\x45\xc1\x0d\xaa\xc8\x06\x2d\x05\xdc\x90\xf6\xa6\x61\x77\x88\x8d\xc3\x85\xe4\xa4\x8f\x01\x0d\x0b\xa9\x13\x38\x3f\xe5\x38\x81\x92\xfd\x96\x49\xd6\x4c\x12\x91\xdd\xa0\x8b\x78\x8a\xc8\x6b\x04\x4f\x8a\xce\x44\xc7\x85\x46\x0c\x29\x06\x32\xf8\x20\x3c\x7d\x93\xc2\x4a\x4a\x18\xd0\xd9\x5c\xe6\x04\x07\x6c\xd4\x1d\x97\x6a\xc5\xb9\x41\x91\x1d\x82\xb4\x70\x12\xf5\x30\xb0\xc7\x79\xd7\x24\x3a\x93\x36\x19\xa1\x25\xf6\xc4\xb9\x82\xb4\x92\x16\x5f\xbc\xf0\x11\x43\x7d\x53\xd7\xf5\xdc\x55\x2a\xdb\x6d\x49\x09\xed\x7d\xe8\x63\x2f\x1e\xcb\xed\xe6\x43\x27\x10\x06\x64\x43\xbd\xd6\x52\x26\x7d\x05\x00\x00\xff\xff\x65\x57\x05\xe5\xd1\x02\x00\x00")
+
+func runtimeHelpMypluginsMdBytes() ([]byte, error) {
+	return bindataRead(
+		_runtimeHelpMypluginsMd,
+		"runtime/help/myplugins.md",
+	)
+}
+
+func runtimeHelpMypluginsMd() (*asset, error) {
+	bytes, err := runtimeHelpMypluginsMdBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "runtime/help/myplugins.md", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -3665,6 +3686,7 @@ var _bindata = map[string]func() (*asset, error){
 	"runtime/help/gimmickcolors.md":                           runtimeHelpGimmickcolorsMd,
 	"runtime/help/help.md":                                    runtimeHelpHelpMd,
 	"runtime/help/keybindings.md":                             runtimeHelpKeybindingsMd,
+	"runtime/help/myplugins.md":                               runtimeHelpMypluginsMd,
 	"runtime/help/options.md":                                 runtimeHelpOptionsMd,
 	"runtime/help/plugins.md":                                 runtimeHelpPluginsMd,
 	"runtime/help/tutorial.md":                                runtimeHelpTutorialMd,
@@ -3881,6 +3903,7 @@ var _bintree = &bintree{nil, map[string]*bintree{
 			"gimmickcolors.md": &bintree{runtimeHelpGimmickcolorsMd, map[string]*bintree{}},
 			"help.md":          &bintree{runtimeHelpHelpMd, map[string]*bintree{}},
 			"keybindings.md":   &bintree{runtimeHelpKeybindingsMd, map[string]*bintree{}},
+			"myplugins.md":     &bintree{runtimeHelpMypluginsMd, map[string]*bintree{}},
 			"options.md":       &bintree{runtimeHelpOptionsMd, map[string]*bintree{}},
 			"plugins.md":       &bintree{runtimeHelpPluginsMd, map[string]*bintree{}},
 			"tutorial.md":      &bintree{runtimeHelpTutorialMd, map[string]*bintree{}},
