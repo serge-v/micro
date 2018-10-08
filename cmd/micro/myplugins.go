@@ -201,6 +201,7 @@ func (g *wordcompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 		prefix := getLeftChunk(targetLine, c.X)
 		line = strings.TrimPrefix(line, prefix)
 		g.target.Buf.Insert(Loc{c.X, c.Y}, line)
+		messenger.Message("completed: ", prefix+line)
 		return true
 	case tcell.KeyEsc, tcell.KeyCtrlSpace:
 		g.v.Quit(false)
@@ -209,7 +210,7 @@ func (g *wordcompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 		return false
 	}
 
-	messenger.Message("filter: ", g.filter)
+	messenger.Message("wordcomplete: ", g.filter)
 
 	words := getFiltered(g.words, g.filter)
 	b := NewBufferFromString(strings.Join(words, "\n"), "")
@@ -236,7 +237,7 @@ func getWords(r io.Reader) []string {
 			}
 		}
 	}
-	sort.Strings(words)
+	sort.Slice(words, func(i, j int) bool { return strings.ToLower(words[i]) < strings.ToLower(words[j]) })
 	var prev string
 	for _, w := range words {
 		if w != prev {
@@ -251,6 +252,9 @@ func getFiltered(words []string, prefix string) []string {
 	var res []string
 	for _, w := range words {
 		low := strings.ToLower(w)
+		if prefix == low {
+			continue
+		}
 		if strings.Contains(low, prefix) {
 			res = append(res, w)
 		}
@@ -263,7 +267,7 @@ func (v *View) wordComplete(usePlugin bool) bool {
 	line := v.Buf.Line(c.Y)
 
 	g := &wordcompletePlugin{
-		filter: getLeftChunk(line, c.X),
+		filter: strings.ToLower(getLeftChunk(line, c.X)),
 		target: v,
 		words:  getWords(v.Buf.Buffer(false)),
 	}
@@ -276,6 +280,7 @@ func (v *View) wordComplete(usePlugin bool) bool {
 	g.v.Type.Scratch = true
 	SetLocal([]string{"ruler", "off"})
 	g.v.handler = func(e *tcell.EventKey) bool { return g.HandleEvent(e) }
+	messenger.Message("wordcomplete: ", g.filter)
 
 	return true
 }
