@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -53,6 +54,9 @@ var myPlugins = []pluginDef{
 
 	// Set buffer mode to jump to the file on the enter key.
 	{"SetJumpMode", "", (*View).setJumpMode},
+
+	// Exec command under the cursor an open jump view.
+	{"ExecCommand", "", (*View).execCommand},
 }
 
 func addMyPlugins(m map[string]StrCommand) {
@@ -547,6 +551,17 @@ var goinstallPlugin struct {
 }
 
 func (v *View) gotoError(ln errorLine) {
+	log.Printf("goto: %s:%d:%d: %s", ln.fname, ln.line, ln.pos, ln.message)
+	if _, err := os.Stat(ln.fname); err != nil {
+		return
+	}
+	if ln.line == 0 {
+		ln.line = 1
+	}
+	if ln.pos == 0 {
+		ln.pos = 1
+	}
+
 	errfile, _ := filepath.Abs(ln.fname)
 	currfile, _ := filepath.Abs(v.Buf.Path)
 	if currfile != errfile {
@@ -773,6 +788,67 @@ func (g *godeclsPlugin) HandleEvent(e *tcell.EventKey) bool {
 	SetLocal([]string{"ruler", "off"})
 	g.v.Type.Readonly = true
 	g.v.Type.Scratch = true
+
+	return true
+}
+
+// exec plugin: executes the command under the cursor and opens split view for jumping to location
+
+type execPlugin struct {
+	v      *View // grep results view
+	target *View // target view to insert completion
+}
+
+func (v *View) execCommand(usePlugin bool) bool {
+	sel := v.Cursor.GetSelection()
+	if sel == "" {
+		v.Cursor.SelectWord()
+		sel = v.Cursor.GetSelection()
+	}
+	if sel == "" {
+		return true
+	}
+
+	p := &execPlugin{}
+	if !strings.HasPrefix(v.Buf.Path, "Exec: ") {
+		v.Save(false)
+	}
+
+	cmd := exec.Command("bash", "-c", sel)
+	buf, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Println("exec:", err)
+		messenger.Error(err.Error())
+	}
+	b := NewBufferFromString(strings.TrimSpace(string(buf)), "Exec: "+sel)
+	v.HSplit(b)
+	p.v = CurView()
+	p.v.Type.Readonly = true
+	p.v.Type.Scratch = true
+	p.v.handler = func(e *tcell.EventKey) bool { return p.HandleEvent(e) }
+
+	return true
+}
+
+func (g *execPlugin) HandleEvent(e *tcell.EventKey) bool {
+	log.Printf("e: %+v", e)
+
+	switch e.Key() {
+	case tcell.KeyEnter:
+		c := g.v.Cursor
+		line := g.v.Buf.Line(c.Y)
+		el := parseGrepLine(line)
+		if el.fname == "" {
+			return true
+		}
+		g.v.gotoError(el)
+		return true
+	case tcell.KeyEsc, tcell.KeyCtrlSpace:
+		g.v.Quit(false)
+		return true
+	default:
+		return false
+	}
 
 	return true
 }
