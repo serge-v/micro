@@ -740,7 +740,6 @@ func (g *setmodePlugin) HandleEvent(e *tcell.EventKey) bool {
 // godecls plugin
 
 type godeclsPlugin struct {
-	//	v      *View
 	target *View
 	filter string
 	decls  []astcontext.Decl
@@ -835,7 +834,6 @@ func (g *godeclsPlugin) HandleEvent(e *tcell.EventKey) bool {
 // exec plugin: executes the command under the cursor and opens split view for jumping to location
 
 type execPlugin struct {
-	v      *View // grep results view
 	target *View // target view to insert completion
 }
 
@@ -862,29 +860,28 @@ func (v *View) execCommand(usePlugin bool) bool {
 	}
 	b := NewBufferFromString(strings.TrimSpace(string(buf)), "Exec: "+sel)
 	v.HSplit(b)
-	p.v = CurView()
-	p.v.Type.Readonly = true
-	p.v.Type.Scratch = true
-	p.v.handler = func(e *tcell.EventKey) bool { return p.HandleEvent(e) }
+	setScratch()
+	CurView().handler = func(e *tcell.EventKey) bool { return p.HandleEvent(e) }
 
 	return true
 }
 
 func (g *execPlugin) HandleEvent(e *tcell.EventKey) bool {
 	log.Printf("e: %+v", e)
+	v := CurView()
 
 	switch e.Key() {
 	case tcell.KeyEnter:
-		c := g.v.Cursor
-		line := g.v.Buf.Line(c.Y)
+		c := v.Cursor
+		line := v.Buf.Line(c.Y)
 		el := parseGrepLine(line)
 		if el.fname == "" {
 			return true
 		}
-		g.v.gotoError(el)
+		v.gotoError(el)
 		return true
 	case tcell.KeyEsc, tcell.KeyCtrlSpace:
-		g.v.Quit(false)
+		v.Quit(false)
 		return true
 	default:
 		return false
