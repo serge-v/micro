@@ -422,19 +422,29 @@ func (v *View) goComplete(usePlugin bool) bool {
 	return true
 }
 
+func setScratch() {
+	CurView().Type = vtScratch
+	SetLocal([]string{"ruler", "off"})
+	SetLocal([]string{"autosave", "off"})
+}
+
 type fileopenerPlugin struct {
-	v      *View
+	dir    string // dir to restore
 	filter string
-	lsout  []byte
+	lsout  string
 }
 
 func (g *fileopenerPlugin) HandleEvent(e *tcell.EventKey) bool {
 	log.Printf("e: %+v", e)
+	v := CurView()
 
 	switch e.Key() {
 	case tcell.KeyEsc:
 		g.filter = ""
-		g.v.Quit(false)
+		v.Quit(false)
+		if err := os.Chdir(g.dir); err != nil {
+			messenger.Error(err.Error())
+		}
 		return true
 	case tcell.KeyDEL:
 		if len(g.filter) > 0 {
@@ -442,22 +452,34 @@ func (g *fileopenerPlugin) HandleEvent(e *tcell.EventKey) bool {
 		}
 	case tcell.KeyRune:
 		if e.Modifiers()&tcell.ModAlt == tcell.ModAlt {
-			g.v.Quit(false)
+			v.Quit(false)
 			return true
 		}
 		g.filter += string(e.Rune())
 	case tcell.KeyEnter:
-		c := g.v.Cursor
-		line := g.v.Buf.Line(c.Y)
-		g.v.Quit(false)
-		g.v.AddTab(false)
-		CurView().Open(line)
-		return true
+		c := v.Cursor
+		line := v.Buf.Line(c.Y)
+		fi, err := os.Stat(line)
+		if !fi.IsDir() {
+			v.Quit(false)
+			v.AddTab(false)
+			CurView().Open(line)
+			if err := os.Chdir(g.dir); err != nil {
+				messenger.Error(err.Error())
+			}
+			return true
+		}
+		Cd([]string{line})
+		g.filter = ""
+		g.lsout, err = runLs()
+		if err != nil {
+			return true
+		}
 	default:
 		return false
 	}
 
-	lines := strings.Split(string(g.lsout), "\n")
+	lines := strings.Split(g.lsout, "\n")
 	filtered := make([]string, 0, len(lines))
 	messenger.Message("filter: ", g.filter)
 
@@ -469,31 +491,49 @@ func (g *fileopenerPlugin) HandleEvent(e *tcell.EventKey) bool {
 	}
 	text := strings.Join(filtered, "\n")
 	b := NewBufferFromString(text, "")
-	g.v.OpenBuffer(b)
-	SetLocal([]string{"ruler", "off"})
-	g.v.Type.Readonly = true
-	g.v.Type.Scratch = true
-
+	v.OpenBuffer(b)
+	setScratch()
 	return true
 }
 
-func (v *View) openCur(usePlugin bool) bool {
-	cmd := exec.Command("ls", "-F", "-1")
+func runLs() (string, error) {
+	cmd := exec.Command("ls", "-F", "-1", "-a")
 	lsout, err := cmd.CombinedOutput()
 	if err != nil {
 		messenger.Error("ls: " + err.Error())
-		return false
+		return "error: err.Error()", err
 	}
 
+	lines := strings.Split(string(lsout), "\n")
+	filtered := make([]string, 0, len(lines))
+	for _, ln := range lines {
+		if ln == "./" {
+			continue
+		}
+		filtered = append(filtered, ln)
+	}
+	text := strings.Join(filtered, "\n")
+	return text, nil
+}
+
+func (v *View) openCur(usePlugin bool) bool {
+	dir, err := os.Getwd()
+	if err != nil {
+		messenger.Error(err.Error())
+		return true
+	}
+	lsout, err := runLs()
+	if err != nil {
+		return true
+	}
 	b := NewBufferFromString(strings.TrimSpace(string(lsout)), "")
 	v.VSplit(b)
-
+	setScratch()
 	g := &fileopenerPlugin{
-		v:     CurView(),
 		lsout: lsout,
+		dir:   dir,
 	}
-	SetLocal([]string{"ruler", "off"})
-	g.v.handler = func(e *tcell.EventKey) bool { return g.HandleEvent(e) }
+	CurView().handler = func(e *tcell.EventKey) bool { return g.HandleEvent(e) }
 	return true
 }
 
@@ -700,7 +740,7 @@ func (g *setmodePlugin) HandleEvent(e *tcell.EventKey) bool {
 // godecls plugin
 
 type godeclsPlugin struct {
-	v      *View
+	//	v      *View
 	target *View
 	filter string
 	decls  []astcontext.Decl
@@ -734,23 +774,21 @@ func (v *View) goDecls(usePlugin bool) bool {
 
 	b := NewBufferFromString(strings.TrimSuffix(w.String(), "\n"), "")
 	v.HSplit(b)
-	p.v = CurView()
-	p.v.Type.Readonly = true
-	p.v.Type.Scratch = true
+	setScratch()
 	SetLocal([]string{"filetype", "go"})
-	SetLocal([]string{"ruler", "off"})
-	p.v.handler = func(e *tcell.EventKey) bool { return p.HandleEvent(e) }
+	CurView().handler = func(e *tcell.EventKey) bool { return p.HandleEvent(e) }
 
 	return true
 }
 
 func (g *godeclsPlugin) HandleEvent(e *tcell.EventKey) bool {
 	log.Printf("e: %+v", e)
+	v := CurView()
 
 	switch e.Key() {
 	case tcell.KeyRune:
 		if e.Modifiers()&tcell.ModAlt == tcell.ModAlt {
-			g.v.Quit(false)
+			v.Quit(false)
 			return true
 		}
 		g.filter += string(e.Rune())
@@ -759,9 +797,9 @@ func (g *godeclsPlugin) HandleEvent(e *tcell.EventKey) bool {
 			g.filter = g.filter[:len(g.filter)-1]
 		}
 	case tcell.KeyEnter:
-		c := g.v.Cursor
-		line := g.v.Buf.Line(c.Y)
-		g.v.Quit(false)
+		c := v.Cursor
+		line := v.Buf.Line(c.Y)
+		v.Quit(false)
 		cc := strings.SplitN(strings.TrimSpace(line), ":", 2)
 		if len(cc) == 2 {
 			ln, _ := strconv.Atoi(cc[0])
@@ -775,7 +813,7 @@ func (g *godeclsPlugin) HandleEvent(e *tcell.EventKey) bool {
 		}
 		return true
 	case tcell.KeyEsc, tcell.KeyCtrlSpace:
-		g.v.Quit(false)
+		v.Quit(false)
 		return true
 	default:
 		return false
@@ -788,12 +826,9 @@ func (g *godeclsPlugin) HandleEvent(e *tcell.EventKey) bool {
 		}
 	}
 	b := NewBufferFromString(strings.TrimSuffix(w.String(), "\n"), "")
-	g.v.OpenBuffer(b)
+	v.OpenBuffer(b)
+	setScratch()
 	SetLocal([]string{"filetype", "go"})
-	SetLocal([]string{"ruler", "off"})
-	g.v.Type.Readonly = true
-	g.v.Type.Scratch = true
-
 	return true
 }
 
