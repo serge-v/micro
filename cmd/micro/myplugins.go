@@ -93,7 +93,6 @@ func myPluginsPostAction(funcName string, view *View, args ...interface{}) {
 // grep plugin
 
 type grepPlugin struct {
-	v      *View // grep results view
 	target *View // target view to insert completion
 }
 
@@ -141,26 +140,25 @@ func (v *View) findInFiles(usePlugin bool) bool {
 	}
 	b := NewBufferFromString(strings.TrimSpace(string(buf)), "Find: "+sel)
 	v.HSplit(b)
-	p.v = CurView()
-	p.v.Type.Readonly = true
-	p.v.Type.Scratch = true
-	p.v.handler = func(e *tcell.EventKey) bool { return p.HandleEvent(e) }
+	setScratch()
+	CurView().handler = func(e *tcell.EventKey) bool { return p.HandleEvent(e) }
 
 	return true
 }
 
 func (g *grepPlugin) HandleEvent(e *tcell.EventKey) bool {
 	log.Printf("e: %+v", e)
+	v := CurView()
 
 	switch e.Key() {
 	case tcell.KeyEnter:
-		c := g.v.Cursor
-		line := g.v.Buf.Line(c.Y)
+		c := v.Cursor
+		line := v.Buf.Line(c.Y)
 		el := parseGrepLine(line)
-		g.v.gotoError(el)
+		v.gotoError(el)
 		return true
 	case tcell.KeyEsc, tcell.KeyCtrlSpace:
-		g.v.Quit(false)
+		v.Quit(false)
 		return true
 	default:
 		return false
@@ -173,18 +171,18 @@ func (g *grepPlugin) HandleEvent(e *tcell.EventKey) bool {
 
 type wordcompletePlugin struct {
 	filter string
-	v      *View // words list view
 	target *View // target view to insert completion
 	words  []string
 }
 
 func (g *wordcompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 	log.Printf("e: %+v", e)
+	v := CurView()
 
 	switch e.Key() {
 	case tcell.KeyRune:
 		if e.Modifiers()&tcell.ModAlt == tcell.ModAlt {
-			g.v.Quit(false)
+			v.Quit(false)
 			return true
 		}
 		g.filter += string(e.Rune())
@@ -193,9 +191,9 @@ func (g *wordcompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 			g.filter = g.filter[:len(g.filter)-1]
 		}
 	case tcell.KeyEnter:
-		c := g.v.Cursor
-		line := g.v.Buf.Line(c.Y)
-		g.v.Quit(false)
+		c := v.Cursor
+		line := v.Buf.Line(c.Y)
+		v.Quit(false)
 		c = g.target.Cursor
 		targetLine := g.target.Buf.Line(c.Y)
 		prefix := getLeftChunk(targetLine, c.X)
@@ -204,7 +202,7 @@ func (g *wordcompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 		messenger.Message("completed: ", prefix+line)
 		return true
 	case tcell.KeyEsc, tcell.KeyCtrlSpace:
-		g.v.Quit(false)
+		v.Quit(false)
 		return true
 	default:
 		return false
@@ -214,12 +212,9 @@ func (g *wordcompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 
 	words := getFiltered(g.words, g.filter)
 	b := NewBufferFromString(strings.Join(words, "\n"), "")
-	g.v.OpenBuffer(b)
-	g.v.Type.Readonly = true
-	g.v.Type.Scratch = true
-	SetLocal([]string{"ruler", "off"})
+	v.OpenBuffer(b)
+	setScratch()
 	log.Println("filter:", g.filter, "words:", len(g.words), "filtered:", len(words))
-
 	return true
 }
 
@@ -273,13 +268,20 @@ func (v *View) wordComplete(usePlugin bool) bool {
 	}
 
 	words := getFiltered(g.words, g.filter)
+	if len(words) == 1 {
+		line := words[0]
+		c := g.target.Cursor
+		targetLine := g.target.Buf.Line(c.Y)
+		prefix := getLeftChunk(targetLine, c.X)
+		line = strings.TrimPrefix(line, prefix)
+		g.target.Buf.Insert(Loc{c.X, c.Y}, line)
+		messenger.Message("word completed: ", words[0])
+		return true
+	}
 	b := NewBufferFromString(strings.Join(words, "\n"), "")
 	v.VSplit(b)
-	g.v = CurView()
-	g.v.Type.Readonly = true
-	g.v.Type.Scratch = true
-	SetLocal([]string{"ruler", "off"})
-	g.v.handler = func(e *tcell.EventKey) bool { return g.HandleEvent(e) }
+	setScratch()
+	CurView().handler = func(e *tcell.EventKey) bool { return g.HandleEvent(e) }
 	messenger.Message("wordcomplete: ", g.filter)
 
 	return true
@@ -289,7 +291,6 @@ func (v *View) wordComplete(usePlugin bool) bool {
 
 type gocompletePlugin struct {
 	filter string
-	v      *View // gocode view
 	target *View // target view to insert completion
 	lines  []string
 }
@@ -308,17 +309,18 @@ func getLeftChunk(line string, pos int) string {
 
 func (g *gocompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 	log.Printf("e: %+v", e)
+	v := CurView()
 
 	switch e.Key() {
 	case tcell.KeyRune:
 		if e.Rune() == '-' {
-			g.v.x++
-			g.v.Width--
+			v.x++
+			v.Width--
 			return true
 		}
 		if e.Rune() == '=' {
-			g.v.x--
-			g.v.Width++
+			v.x--
+			v.Width++
 			return true
 		}
 		g.filter += string(e.Rune())
@@ -327,9 +329,9 @@ func (g *gocompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 			g.filter = g.filter[:len(g.filter)-1]
 		}
 	case tcell.KeyEnter:
-		c := g.v.Cursor
-		line := g.v.Buf.Line(c.Y)
-		g.v.Quit(false)
+		c := v.Cursor
+		line := v.Buf.Line(c.Y)
+		v.Quit(false)
 		fields := strings.FieldsFunc(line, func(r rune) bool {
 			return !unicode.IsLetter(r) && !unicode.IsNumber(r)
 		})
@@ -346,7 +348,7 @@ func (g *gocompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 		messenger.Message(line)
 		return true
 	case tcell.KeyEsc, tcell.KeyCtrlSpace:
-		g.v.Quit(false)
+		v.Quit(false)
 		return true
 	default:
 		return false
@@ -370,12 +372,9 @@ func (g *gocompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 
 	text := strings.Join(filtered, "\n")
 	b := NewBufferFromString(text, "")
-	g.v.OpenBuffer(b)
+	v.OpenBuffer(b)
+	setScratch()
 	SetLocal([]string{"filetype", "go"})
-	SetLocal([]string{"ruler", "off"})
-	g.v.Type.Readonly = true
-	g.v.Type.Scratch = true
-
 	return true
 }
 
@@ -410,15 +409,30 @@ func (v *View) goComplete(usePlugin bool) bool {
 		g.lines = append(g.lines, s)
 	}
 
+	if len(g.lines) == 1 {
+		line := g.lines[0]
+		fields := strings.FieldsFunc(line, func(r rune) bool {
+			return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+		})
+		if len(fields) < 2 {
+			return true
+		}
+
+		c = g.target.Cursor
+		targetLine := g.target.Buf.Line(c.Y)
+		prefix := getLeftChunk(targetLine, c.X)
+		ident := fields[1]
+		ident = strings.TrimPrefix(ident, prefix)
+		g.target.Buf.Insert(Loc{c.X, c.Y}, ident)
+		messenger.Message(line)
+		return true
+	}
+
 	b := NewBufferFromString(strings.Join(g.lines, "\n"), "")
 	v.VSplit(b)
-	g.v = CurView()
+	setScratch()
 	SetLocal([]string{"filetype", "go"})
-	SetLocal([]string{"ruler", "off"})
-	g.v.Type.Readonly = true
-	g.v.Type.Scratch = true
-	g.v.handler = func(e *tcell.EventKey) bool { return g.HandleEvent(e) }
-
+	CurView().handler = func(e *tcell.EventKey) bool { return g.HandleEvent(e) }
 	return true
 }
 
