@@ -643,11 +643,11 @@ func (v *View) gotoError(ln errorLine) {
 	CurView().Cursor.GotoLoc(loc)
 	CurView().Cursor.Relocate()
 	CurView().Relocate()
+	CurView().Center(false)
 	messenger.Message(fmt.Sprintf("%s:%d:%d: %s", ln.fname, ln.line, ln.pos, ln.message))
 }
 
 func (v *View) goInstall(usePlugin bool) bool {
-	log.Println("goInstall view command")
 	p := &goinstallPlugin
 	if p.hasNextErr {
 		p.cur++
@@ -713,7 +713,6 @@ func (v *View) goInstall(usePlugin bool) bool {
 	} else {
 		messenger.Message("no errors")
 	}
-	log.Println("err lines:", len(p.lines))
 	return true
 }
 
@@ -760,7 +759,6 @@ type godeclsPlugin struct {
 }
 
 func (v *View) goDecls(usePlugin bool) bool {
-	log.Println("godecls command")
 	p := &godeclsPlugin{
 		target: v,
 	}
@@ -795,7 +793,6 @@ func (v *View) goDecls(usePlugin bool) bool {
 }
 
 func (g *godeclsPlugin) HandleEvent(e *tcell.EventKey) bool {
-	log.Printf("e: %+v", e)
 	v := CurView()
 
 	switch e.Key() {
@@ -881,7 +878,6 @@ func (v *View) execCommand(usePlugin bool) bool {
 }
 
 func (g *execPlugin) HandleEvent(e *tcell.EventKey) bool {
-	log.Printf("e: %+v", e)
 	v := CurView()
 
 	switch e.Key() {
