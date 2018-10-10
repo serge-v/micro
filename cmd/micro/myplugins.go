@@ -100,16 +100,17 @@ func parseGrepLine(s string) errorLine {
 	el := errorLine{}
 
 	cc := strings.Split(s, ":")
-	if len(cc) < 3 {
-		return el
-	}
 
-	el.fname = cc[0]
-	el.line, _ = strconv.Atoi(cc[1])
+	if len(cc) > 0 {
+		el.fname = cc[0]
+	}
+	if len(cc) > 1 {
+		el.line, _ = strconv.Atoi(cc[1])
+	}
 	if len(cc) == 4 {
 		el.pos, _ = strconv.Atoi(cc[2])
 		el.message = strings.TrimSpace(cc[3])
-	} else {
+	} else if len(cc) == 3 {
 		el.message = strings.TrimSpace(cc[2])
 	}
 
