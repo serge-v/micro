@@ -6,8 +6,10 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -899,4 +901,84 @@ func (g *execPlugin) HandleEvent(e *tcell.EventKey) bool {
 	}
 
 	return true
+}
+
+func printAutocomplete() {
+	lastarg := flag.Arg(flag.NArg() - 1)
+	lastpar := flag.Arg(flag.NArg() - 2)
+
+	switch lastarg {
+	case "-ruler":
+		{
+			list := strings.Split("on,off", ",")
+			for _, s := range list {
+				if strings.HasPrefix(s, lastpar) {
+					fmt.Println(s)
+				}
+			}
+			return
+		}
+	}
+
+	if strings.HasPrefix(lastpar, "-") {
+		flag.VisitAll(func(f *flag.Flag) {
+			if f.Name == "c" {
+				return
+			}
+			if strings.HasPrefix("-"+f.Name, flag.Arg(1)) {
+				fmt.Println("-" + f.Name)
+			}
+		})
+	} else {
+		files, _ := filepath.Glob("*")
+		for _, file := range files {
+			if strings.HasPrefix(file, lastpar) {
+				fmt.Println(file)
+			}
+		}
+	}
+
+	log.Println("lastpar:", lastpar, "lastarg:", lastarg)
+}
+
+var (
+	autocompleteScript = `complete -C "micro -c" micro`
+	acfile             = os.Getenv("HOME") + "/.config/bash_completion/dimplectl"
+)
+
+func initAutocomplete(file, script string) {
+	if err := os.MkdirAll(filepath.Dir(file), 0755); err != nil {
+		panic(err)
+	}
+
+	actext, _ := ioutil.ReadFile(file)
+	if string(actext) != script {
+		if err := ioutil.WriteFile(file, []byte(script), 0644); err != nil {
+			panic(err)
+		}
+		fmt.Println("autocomplete installed. Run source ~/.bashrc now")
+	}
+
+	what := `for i in ~/.config/bash_completion/*; do source $i ; done`
+	bashrc := os.Getenv("HOME") + "/.bashrc"
+	buf, _ := ioutil.ReadFile(bashrc)
+	lines := strings.Split(string(buf), "\n")
+	found := false
+	for _, ln := range lines {
+		if ln == what {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		f, err := os.OpenFile(bashrc, os.O_RDWR|os.O_APPEND, 0660)
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Fprintf(f, "\n%s\n", what)
+		f.Close()
+		fmt.Println("common autocomplete installed. Run source ~/.bashrc now")
+	}
 }

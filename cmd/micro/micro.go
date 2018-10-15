@@ -287,6 +287,8 @@ var flagStartPos = flag.String("startpos", "", "LINE,COL to start the cursor at 
 var flagConfigDir = flag.String("config-dir", "", "Specify a custom location for the configuration directory")
 var flagOptions = flag.Bool("options", false, "Show all option help")
 var flagLog = flag.Bool("log", false, "debug log into /tmp/micro.log")
+var flagJumpMode = flag.Bool("jumpmode", false, "Set jump mode for buffers")
+var flagAutocomplete = flag.Bool("c", false, "Autocomplete command line")
 
 func main() {
 	flag.Usage = func() {
@@ -299,6 +301,12 @@ func main() {
 		fmt.Println("    \tThis can also be done by opening file:LINE:COL")
 		fmt.Println("-options")
 		fmt.Println("    \tShow all option help")
+		fmt.Println("-log")
+		fmt.Println("    \tWrite debug log to /tmp/micro.log")
+		fmt.Println("-jumpmode")
+		fmt.Println("    \tOn start set the jump mode for the buffers")
+		fmt.Println("-c")
+		fmt.Println("    \tAutocomplete support")
 		fmt.Println("-version")
 		fmt.Println("    \tShow the version number and information")
 
@@ -334,6 +342,12 @@ func main() {
 		log.SetOutput(f)
 	} else {
 		log.SetOutput(ioutil.Discard)
+	}
+
+	initAutocomplete(acfile, autocompleteScript)
+	if *flagAutocomplete {
+		printAutocomplete()
+		return
 	}
 
 	if *flagOptions {
@@ -401,6 +415,9 @@ func main() {
 		for _, t := range tabs {
 			for _, v := range t.Views {
 				v.Center(false)
+				if *flagJumpMode {
+					v.setJumpMode(false)
+				}
 			}
 
 			t.Resize()
