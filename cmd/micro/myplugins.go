@@ -943,7 +943,7 @@ func printAutocomplete() {
 
 var (
 	autocompleteScript = `complete -C "micro -c" micro`
-	acfile             = os.Getenv("HOME") + "/.config/bash_completion/dimplectl"
+	acfile             = os.Getenv("HOME") + "/.config/bash_completion/micro"
 )
 
 func initAutocomplete(file, script string) {
