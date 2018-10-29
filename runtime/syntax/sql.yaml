@@ -6,9 +6,9 @@ detect:
 rules:
     - statement: "(?i)\\b(ALL|ASC|AS|ALTER|AND|ADD|AUTO_INCREMENT)\\b"
     - statement: "(?i)\\b(BETWEEN|BINARY|BOTH|BY|BOOLEAN)\\b"
-    - statement: "(?i)\\b(CHANGE|CHECK|COLUMNS|COLUMN|CROSS|CREATE)\\b"
+    - statement: "(?i)\\b(CHANGE|CHARSET|CHECK|COLLATE|COLUMNS|COLUMN|COMMENT|CROSS|CREATE)\\b"
     - statement: "(?i)\\b(DATABASES|DATABASE|DATA|DELAYED|DESCRIBE|DESC|DISTINCT|DELETE|DROP|DEFAULT)\\b"
-    - statement: "(?i)\\b(ENCLOSED|ESCAPED|EXISTS|EXPLAIN)\\b"
+    - statement: "(?i)\\b(ENCLOSED|ESCAPED|EXISTS|EXPLAIN|ENGINE)\\b"
     - statement: "(?i)\\b(FIELDS|FIELD|FLUSH|FOR|FOREIGN|FUNCTION|FROM)\\b"
     - statement: "(?i)\\b(GROUP|GRANT|HAVING)\\b"
     - statement: "(?i)\\b(IGNORE|INDEX|INFILE|INSERT|INNER|INTO|IDENTIFIED|IN|IS|IF)\\b"
