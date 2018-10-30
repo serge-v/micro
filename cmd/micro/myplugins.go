@@ -24,9 +24,9 @@ import (
 )
 
 type pluginDef struct {
-	Action string                 // micro action name
-	Key    string                 // key binding
-	Func   func(*View, bool) bool // binding handler
+	Action string                     // micro action name
+	Key    string                     // key binding
+	Func   func(*View, []string) bool // binding handler
 }
 
 var myPlugins = []pluginDef{
@@ -59,6 +59,9 @@ var myPlugins = []pluginDef{
 
 	// Exec command under the cursor an open jump view.
 	{"ExecCommand", "", (*View).execCommand},
+
+	// TextFilter command passes text selection into the filter like 'textfilter sort'.
+	{"TextFilter", "", (*View).textFilter},
 }
 
 func addMyPlugins(m map[string]StrCommand) {
@@ -66,10 +69,12 @@ func addMyPlugins(m map[string]StrCommand) {
 		f := p.Func
 		commandActions[p.Action] = func(args []string) {
 			log.Println("command:", p.Action)
-			f(CurView(), false)
+			f(CurView(), args)
 		}
 		m[strings.ToLower(p.Action)] = StrCommand{p.Action, []Completion{NoCompletion}}
-		bindingActions[p.Action] = f
+		bindingActions[p.Action] = func(v *View, usePlugin bool) bool {
+			return f(v, []string{})
+		}
 	}
 }
 
@@ -88,7 +93,7 @@ func myPluginsPostAction(funcName string, view *View, args ...interface{}) {
 
 	if funcName == "OpenFile" && strings.HasSuffix(view.Buf.Path, ".err") {
 		view.Buf.Settings["filetype"] = "err"
-		view.setJumpMode(false)
+		view.setJumpMode([]string{})
 	}
 }
 
@@ -119,7 +124,7 @@ func parseGrepLine(s string) errorLine {
 	return el
 }
 
-func (v *View) findInFiles(usePlugin bool) bool {
+func (v *View) findInFiles(args []string) bool {
 	log.Println("findInFiles command")
 	sel := v.Cursor.GetSelection()
 	if sel == "" {
@@ -260,7 +265,7 @@ func getFiltered(words []string, prefix string) []string {
 	return res
 }
 
-func (v *View) wordComplete(usePlugin bool) bool {
+func (v *View) wordComplete(args []string) bool {
 	c := v.Cursor
 	line := v.Buf.Line(c.Y)
 
@@ -381,7 +386,7 @@ func (g *gocompletePlugin) HandleEvent(e *tcell.EventKey) bool {
 	return true
 }
 
-func (v *View) goComplete(usePlugin bool) bool {
+func (v *View) goComplete(args []string) bool {
 	buf := v.Buf
 	if buf.FileType() != "go" {
 		return false
@@ -533,7 +538,7 @@ func runLs() (string, error) {
 	return text, nil
 }
 
-func (v *View) openCur(usePlugin bool) bool {
+func (v *View) openCur(args []string) bool {
 	dir, err := os.Getwd()
 	if err != nil {
 		messenger.Error(err.Error())
@@ -554,7 +559,7 @@ func (v *View) openCur(usePlugin bool) bool {
 	return true
 }
 
-func (v *View) goDef(usePlugin bool) bool {
+func (v *View) goDef(args []string) bool {
 	c := v.Cursor
 	buf := v.Buf
 	loc := Loc{c.X, c.Y}
@@ -587,7 +592,7 @@ func (v *View) goDef(usePlugin bool) bool {
 	return true
 }
 
-func (v *View) selectNext(usePlugin bool) bool {
+func (v *View) selectNext(args []string) bool {
 	c := v.Cursor
 	w := c.GetSelection()
 	if w != "" {
@@ -650,7 +655,7 @@ func (v *View) gotoError(ln errorLine) {
 	messenger.Message(fmt.Sprintf("%s:%d:%d: %s", ln.fname, ln.line, ln.pos, ln.message))
 }
 
-func (v *View) goInstall(usePlugin bool) bool {
+func (v *View) goInstall(args []string) bool {
 	p := &goinstallPlugin
 	if p.hasNextErr {
 		p.cur++
@@ -723,7 +728,7 @@ type setmodePlugin struct {
 	v *View
 }
 
-func (v *View) setJumpMode(usePlugin bool) bool {
+func (v *View) setJumpMode(args []string) bool {
 	log.Println("setJumpMode command")
 	p := &setmodePlugin{}
 	p.v = CurView()
@@ -761,7 +766,7 @@ type godeclsPlugin struct {
 	decls  []astcontext.Decl
 }
 
-func (v *View) goDecls(usePlugin bool) bool {
+func (v *View) goDecls(args []string) bool {
 	p := &godeclsPlugin{
 		target: v,
 	}
@@ -851,7 +856,7 @@ type execPlugin struct {
 	target *View // target view to insert completion
 }
 
-func (v *View) execCommand(usePlugin bool) bool {
+func (v *View) execCommand(args []string) bool {
 	sel := v.Cursor.GetSelection()
 	if sel == "" {
 		v.Cursor.SelectWord()
@@ -900,6 +905,37 @@ func (g *execPlugin) HandleEvent(e *tcell.EventKey) bool {
 		return false
 	}
 
+	return true
+}
+
+// text filter
+
+func (v *View) textFilter(args []string) bool {
+	if len(args) == 0 {
+		messenger.Error("usage: textfilter arguments")
+		return true
+	}
+	log.Println("TextFilter command", args)
+	sel := v.Cursor.GetSelection()
+	if sel == "" {
+		v.Cursor.SelectWord()
+		sel = v.Cursor.GetSelection()
+	}
+	if sel == "" {
+		return true
+	}
+	var bout, berr bytes.Buffer
+	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Stdin = strings.NewReader(sel)
+	cmd.Stderr = &berr
+	cmd.Stdout = &bout
+	err := cmd.Run()
+	if err != nil {
+		messenger.Error(err.Error() + " " + berr.String())
+		return true
+	}
+	v.Cursor.DeleteSelection()
+	v.Buf.Insert(v.Cursor.Loc, bout.String())
 	return true
 }
 

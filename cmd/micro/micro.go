@@ -416,7 +416,7 @@ func main() {
 			for _, v := range t.Views {
 				v.Center(false)
 				if *flagJumpMode {
-					v.setJumpMode(false)
+					v.setJumpMode([]string{})
 				}
 			}
 
