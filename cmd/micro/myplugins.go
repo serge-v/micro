@@ -456,25 +456,30 @@ type fileopenerPlugin struct {
 	lsout  string
 }
 
+func (g *fileopenerPlugin) Close() {
+	g.filter = ""
+	CurView().Quit(false)
+	if err := os.Chdir(g.dir); err != nil {
+		messenger.Error(err.Error())
+	}
+	log.Printf("opener closed. dir: %+v", g.dir)
+}
+
 func (g *fileopenerPlugin) HandleEvent(e *tcell.EventKey) bool {
 	log.Printf("e: %+v", e)
 	v := CurView()
 
 	switch e.Key() {
 	case tcell.KeyEsc:
-		g.filter = ""
-		v.Quit(false)
-		if err := os.Chdir(g.dir); err != nil {
-			messenger.Error(err.Error())
-		}
+		g.Close()
 		return true
 	case tcell.KeyDEL:
 		if len(g.filter) > 0 {
 			g.filter = g.filter[:len(g.filter)-1]
 		}
 	case tcell.KeyRune:
-		if e.Modifiers()&tcell.ModAlt == tcell.ModAlt {
-			v.Quit(false)
+		if e.Modifiers()&tcell.ModAlt == tcell.ModAlt && e.Rune() == 'o' {
+			g.Close()
 			return true
 		}
 		g.filter += string(e.Rune())
@@ -940,15 +945,15 @@ func (v *View) textFilter(args []string) bool {
 }
 
 func printAutocomplete() {
-	lastarg := flag.Arg(flag.NArg() - 1)
-	lastpar := flag.Arg(flag.NArg() - 2)
+	a := flag.Arg(flag.NArg() - 1)
+	p := flag.Arg(flag.NArg() - 2)
 
-	switch lastarg {
+	switch a {
 	case "-ruler":
 		{
 			list := strings.Split("on,off", ",")
 			for _, s := range list {
-				if strings.HasPrefix(s, lastpar) {
+				if strings.HasPrefix(s, p) {
 					fmt.Println(s)
 				}
 			}
@@ -956,7 +961,9 @@ func printAutocomplete() {
 		}
 	}
 
-	if strings.HasPrefix(lastpar, "-") {
+	log.Println("arg:", a, "par:", p)
+
+	if strings.HasPrefix(p, "-") {
 		flag.VisitAll(func(f *flag.Flag) {
 			if f.Name == "c" {
 				return
@@ -965,20 +972,34 @@ func printAutocomplete() {
 				fmt.Println("-" + f.Name)
 			}
 		})
-	} else {
-		files, _ := filepath.Glob("*")
-		for _, file := range files {
-			if strings.HasPrefix(file, lastpar) {
-				fmt.Println(file)
-			}
-		}
+		return
 	}
 
-	log.Println("lastpar:", lastpar, "lastarg:", lastarg)
+	if strings.HasPrefix(p, "~") {
+		p = strings.Replace(p, "~", os.Getenv("HOME"), 1)
+	}
+
+	files, err := filepath.Glob(p + "*")
+	if err != nil {
+		log.Printf("glob error: %v", err)
+	}
+	log.Printf("p: %s, files: %v", p, files)
+	for _, file := range files {
+		if strings.HasPrefix(file, p) {
+			n := file
+			fi, _ := os.Stat(n)
+			if fi.IsDir() {
+				n += "/"
+			} else {
+				n += " "
+			}
+			fmt.Println(n)
+		}
+	}
 }
 
 var (
-	autocompleteScript = `complete -C "micro -c" micro`
+	autocompleteScript = `complete -o nospace -C "micro -log -c" micro`
 	acfile             = os.Getenv("HOME") + "/.config/bash_completion/micro"
 )
 
