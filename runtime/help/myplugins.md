@@ -10,3 +10,5 @@
 | Alt+l       | selectnext | Search next occurence of word under cursor |
 |             | findinfiles| Search word upder cursor in ./... files    |
 |             | setjumpmode| Go to errors on enter                      |
+|             | execcommand| Execute selected text as shell command     |
+|             | textfilter | Runs selected text thru filter             |
