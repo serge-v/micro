@@ -1,6 +1,6 @@
 package main
 
-// myplugings is a set of experimental addons for golang development.
+// myplugings is a set of experimental addons for micro editor for golang development.
 
 import (
 	"bufio"
@@ -30,6 +30,9 @@ type pluginDef struct {
 }
 
 var myPlugins = []pluginDef{
+	// Update golang external tools.
+	{"GoUpdate", "", (*View).goUpdateBinaries},
+
 	// Run go install and cycle thru the errors.
 	{"GoInstall", "Alti", (*View).goInstall},
 
@@ -1038,4 +1041,23 @@ func initAutocomplete(file, script string) {
 		f.Close()
 		fmt.Println("common autocomplete installed. Run source ~/.bashrc now")
 	}
+}
+
+func (v *View) goUpdateBinaries(args []string) bool {
+	list := []string{
+		"golang.org/x/tools/cmd/goimports",
+		"github.com/rogpeppe/godef",
+		"github.com/fatih/motion",
+		"github.com/mdempsky/gocode",
+	}
+
+	for _, item := range list {
+		cmd := exec.Command("go", "get", "-u", item)
+		if err := cmd.Run(); err != nil {
+			messenger.Error(cmd.Args, err.Error())
+			return true
+		}
+	}
+	messenger.Message("golang tools updated")
+	return true
 }

@@ -2,6 +2,7 @@
 
 | Key         | Command    | Description
 |-------------|------------|--------------------------------------------|
+|             | goupdate   | Update external golang tools               |
 | Alt+i       | goinstall  | Run go install or goto to the next error   |
 | Alt+]       | godef      | Go to symbol definition                    |
 | Alt+t       | godecls    | Show declarations for current file         |
