@@ -20,7 +20,7 @@ This is a fork of the micro editor with experimental features for golang develop
 | Ctrl+Space  | gocomplete | Show go completion list                    |
 | Alt+o       | opencur    | Open current directory list in split view  |
 | Alt+l       | selectnext | Search for the next occurence of the word under cursor |
-|             | findinfiles| Search word upder cursor in ./... files    |
+|             | findinfiles| Search word under cursor in ./... files    |
 |             | setjumpmode| Set buffer mode to jump to the errors on enter |
 |             | execcommand| Execute selected text as a shell command   |
 |             | textfilter | Runs selected text thru the filter         |
