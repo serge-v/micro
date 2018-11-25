@@ -6,6 +6,35 @@
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/zyedidia/micro/blob/master/LICENSE)
 [![Snap Status](https://build.snapcraft.io/badge/zyedidia/micro.svg)](https://build.snapcraft.io/user/zyedidia/micro)
 
+## Fork changes
+This is a fork of the micro editor with experimental features for golang development.
+
+### Features
+
+| Key         | Command    | Description
+|-------------|------------|--------------------------------------------|
+|             | goupdate   | Update external golang tools               |
+| Alt+i       | goinstall  | Run go install or goto to the next error   |
+| Alt+]       | godef      | Go to symbol definition                    |
+| Alt+t       | godecls    | Show declarations for the current file     |
+| Ctrl+Space  | gocomplete | Show go completion list                    |
+| Alt+o       | opencur    | Open current directory list in split view  |
+| Alt+l       | selectnext | Search for the next occurence of the word under cursor |
+|             | findinfiles| Search word under cursor in ./... files    |
+|             | setjumpmode| Set buffer mode to jump to the errors on enter |
+|             | execcommand| Execute selected text as a shell command   |
+|             | textfilter | Runs selected text thru the filter         |
+
+### Building
+
+```
+go get -d github.com/serge-v/micro/cmd/micro
+cd $GOPATH/src/github.com/serge-v/micro
+make install
+```
+
+#### === original README ====
+
 Micro is a terminal-based text editor that aims to be easy to use and intuitive, while also taking advantage of the full capabilities
 of modern terminals. It comes as one single, batteries-included, static binary with no dependencies, and you can download and use it right now.
 
