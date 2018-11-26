@@ -1002,7 +1002,7 @@ func printAutocomplete() {
 }
 
 var (
-	autocompleteScript = `complete -o nospace -C "micro -log -c" micro`
+	autocompleteScript = `complete -o nospace -C "micro -c" micro`
 	acfile             = os.Getenv("HOME") + "/.config/bash_completion/micro"
 )
 
@@ -1032,7 +1032,7 @@ func initAutocomplete(file, script string) {
 	}
 
 	if !found {
-		f, err := os.OpenFile(bashrc, os.O_RDWR|os.O_APPEND, 0660)
+		f, err := os.OpenFile(bashrc, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0640)
 		if err != nil {
 			panic(err)
 		}
