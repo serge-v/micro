@@ -98,6 +98,53 @@ func myPluginsPostAction(funcName string, view *View, args ...interface{}) {
 		view.Buf.Settings["filetype"] = "err"
 		view.setJumpMode([]string{})
 	}
+
+	chars = ""
+}
+
+var chars string
+
+func replaceAbbrev(view *View, abbrev, replacement string, backpos int) {
+	c := &view.Buf.Cursor
+	loc := c.Loc
+	loc.X = loc.X - len(abbrev) - 1
+	c.GotoLoc(loc)
+	c.Relocate()
+	view.Relocate()
+	view.SelectWordRight(false)
+	c.DeleteSelection()
+	view.Buf.Insert(loc, replacement)
+	loc = c.Move(backpos, view.Buf)
+	c.GotoLoc(loc)
+	c.Relocate()
+	view.Relocate()
+}
+
+func myPluginsOnRune(view *View, r rune) {
+	abbrevs := []struct {
+		what        string
+		replacement string
+		charsback   int
+	}{
+		{"ifr", "if err != nil {\n\treturn err\n}\n", 0},
+		{"ifl", "if err != nil {\n\tlog.Fatal(err)\n}\n", 0},
+
+		{"ifrl", "if err := ; err != nil {\n\tlog.Fatal(err)\n}\n", -33},
+		{"ifrr", "if err := ; err != nil {\n\treturn err\n}\n", -29},
+	}
+
+	log.Println("onrune:", r, "["+chars+"]")
+	if r == ' ' {
+		for _, a := range abbrevs {
+			if chars == a.what {
+				replaceAbbrev(view, a.what, a.replacement, a.charsback)
+				break
+			}
+		}
+		chars = ""
+		return
+	}
+	chars += string(r)
 }
 
 // grep plugin

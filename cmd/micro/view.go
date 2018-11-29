@@ -658,6 +658,7 @@ func (v *View) HandleEvent(event tcell.Event) {
 							TermMessage(err)
 						}
 					}
+					myPluginsOnRune(v, e.Rune())
 
 					if recordingMacro {
 						curMacro = append(curMacro, e.Rune())
