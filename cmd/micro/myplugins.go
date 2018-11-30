@@ -126,6 +126,16 @@ func myPluginsOnRune(view *View, r rune) {
 		replacement string
 		charsback   int
 	}{
+		{"ie", "if err := ", 0},
+		{";e", ";err != nil {\t\n\t\t\n\t}", -3},
+		{"re", "return err", 0},
+		{"lf", "log.Fatal(err)", 0},
+		{"tf", "t.Fatal(err)", 0},
+
+		{"ff", "fmt.Printf(\"\",)", -3},
+		{"fp", "fmt.Println()", -1},
+		{"lp", "log.Println()", -1},
+
 		{"ifr", "if err != nil {\n\treturn err\n}\n", 0},
 		{"ifl", "if err != nil {\n\tlog.Fatal(err)\n}\n", 0},
 
