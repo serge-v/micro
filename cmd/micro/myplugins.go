@@ -132,6 +132,7 @@ func myPluginsOnRune(view *View, r rune) {
 		{"lf", "log.Fatal(err)", 0},
 		{"tf", "t.Fatal(err)", 0},
 
+		{"pp", "println(\"=== \")", -2},
 		{"ff", "fmt.Printf(\"\",)", -3},
 		{"fn", "fmt.Println()", -1},
 		{"lp", "log.Println()", -1},
