@@ -133,7 +133,7 @@ func myPluginsOnRune(view *View, r rune) {
 		{"tf", "t.Fatal(err)", 0},
 
 		{"ff", "fmt.Printf(\"\",)", -3},
-		{"fp", "fmt.Println()", -1},
+		{"fn", "fmt.Println()", -1},
 		{"lp", "log.Println()", -1},
 
 		{"ifr", "if err != nil {\n\treturn err\n}\n", 0},
@@ -141,6 +141,8 @@ func myPluginsOnRune(view *View, r rune) {
 
 		{"ifrl", "if err := ; err != nil {\n\tlog.Fatal(err)\n}\n", -33},
 		{"ifrr", "if err := ; err != nil {\n\treturn err\n}\n", -29},
+
+		{"fu", "func () {\n}\n", -7},
 	}
 
 	log.Println("onrune:", r, "["+chars+"]")
