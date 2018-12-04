@@ -552,7 +552,11 @@ func (g *fileopenerPlugin) HandleEvent(e *tcell.EventKey) bool {
 		if !fi.IsDir() {
 			v.Quit(false)
 			v.AddTab(false)
-			CurView().Open(line)
+			fname, err := filepath.Abs(line)
+			if err != nil {
+				messenger.Error(err.Error())
+			}
+			CurView().Open(fname)
 			if err := os.Chdir(g.dir); err != nil {
 				messenger.Error(err.Error())
 			}
