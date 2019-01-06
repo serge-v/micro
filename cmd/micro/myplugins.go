@@ -141,6 +141,8 @@ func myPluginsOnRune(view *View, r rune) {
 		{"lp", "log.Println()", -1},
 
 		{"fu", "func () {\n}\n", -7},
+
+		{"ss.", "strings", 1},
 	}
 
 	log.Println("onrune:", r, "["+chars+"]")
