@@ -120,31 +120,38 @@ func replaceAbbrev(view *View, abbrev, replacement string, backpos int) {
 	view.Relocate()
 }
 
-func myPluginsOnRune(view *View, r rune) {
-	abbrevs := []struct {
-		what        string
-		replacement string
-		charsback   int
-	}{
-		{"ife", "if err != nil {\n\t\n\t}\n", -4},
-		{"ie", "if err := ", 0},
-		{";e", ";err != nil {\t\n\t\t\n\t}", -3},
+var abbrevs = []struct {
+	what        string
+	replacement string
+	charsback   int
+}{
+	{"ife", "if err != nil {\n\t\n\t}\n", -4},
+	{"ie", "if err := ", 0},
+	{";e", ";err != nil {\t\n\t\t\n\t}", -3},
 
-		{"re", "return err", 0},
-		{"rw", "return errors.Wrap(err, \"\")", -2},
-		{"lf", "log.Fatal(err)", 0},
-		{"tf", "t.Fatal(err)", 0},
+	{"re", "return err", 0},
+	{"rw", "return errors.Wrap(err, \"\")", -2},
+	{"lf", "log.Fatal(err)", 0},
+	{"tf", "t.Fatal(err)", 0},
 
-		{"pp", "println(\"=== \")", -2},
-		{"ff", "fmt.Printf(\"\",)", -3},
-		{"fp", "fmt.Println()", -1},
-		{"lp", "log.Println()", -1},
+	{"pp", "println(\"=== \")", -2},
+	{"ff", "fmt.Printf(\"\",)", -3},
+	{"fp", "fmt.Println()", -1},
+	{"lp", "log.Println()", -1},
 
-		{"fu", "func () {\n}\n", -7},
+	{"fu", "func () {\n}\n", -7},
 
-		{"ss.", "strings", 1},
+	{"ss.", "strings", 1},
+}
+
+func printAbbrevs() {
+	for _, a := range abbrevs {
+		sr := strings.NewReplacer("\n", " ", "\t", "")
+		fmt.Printf("| %4s | %-30s |\n", a.what, sr.Replace(a.replacement))
 	}
+}
 
+func myPluginsOnRune(view *View, r rune) {
 	log.Println("onrune:", r, "["+chars+"]")
 	if r == ' ' {
 		for _, a := range abbrevs {
