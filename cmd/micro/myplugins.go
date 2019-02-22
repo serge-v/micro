@@ -949,13 +949,22 @@ func (v *View) execCommand(args []string) bool {
 		v.Save(false)
 	}
 
-	cmd := exec.Command("bash", "-c", sel)
+	cmdline := strings.Join(args, " ") + " " + sel
+	cmdline = strings.TrimSpace(cmdline)
+	cmd := exec.Command("bash", "-c", cmdline)
+	cmd.Env = append(cmd.Env, "PATH="+os.Getenv("HOME")+"/bin:"+os.Getenv("PATH"))
+	parts := strings.Fields(cmdline)
+	title := parts[0]
+	if len(parts) > 1 {
+		title += "-" + parts[len(parts)-1]
+	}
+
 	buf, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Println("exec:", err)
 		messenger.Error(err.Error())
 	}
-	b := NewBufferFromString(strings.TrimSpace(string(buf)), "Exec: "+sel)
+	b := NewBufferFromString(strings.TrimSpace(string(buf)), "Exec:"+title)
 	v.HSplit(b)
 	setScratch()
 	CurView().handler = func(e *tcell.EventKey) bool { return p.HandleEvent(e) }
