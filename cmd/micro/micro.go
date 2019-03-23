@@ -358,10 +358,6 @@ func main() {
 		printAutocomplete()
 		return
 	}
-	if *flagInit {
-		InitGlobalSettings()
-		return
-	}
 
 	if *flagOptions {
 		// If -options was passed
@@ -388,6 +384,9 @@ func main() {
 
 	// Load the user's settings
 	InitGlobalSettings()
+	if *flagInit {
+		return
+	}
 
 	InitCommands()
 	InitBindings()
