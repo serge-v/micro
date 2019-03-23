@@ -290,6 +290,7 @@ var flagLog = flag.Bool("log", false, "debug log into /tmp/micro.log")
 var flagJumpMode = flag.Bool("jumpmode", false, "Set jump mode for buffers")
 var flagPrintAbbrev = flag.Bool("abbrevs", false, "Print abbreviations")
 var flagAutocomplete = flag.Bool("c", false, "Autocomplete command line")
+var flagInit = flag.Bool("init", false, "Init default config")
 
 func main() {
 	flag.Usage = func() {
@@ -355,6 +356,10 @@ func main() {
 	initAutocomplete(acfile, autocompleteScript)
 	if *flagAutocomplete {
 		printAutocomplete()
+		return
+	}
+	if *flagInit {
+		InitGlobalSettings()
 		return
 	}
 
