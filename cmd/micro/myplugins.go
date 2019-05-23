@@ -36,8 +36,11 @@ var myPlugins = []pluginDef{
 	// Run go install and cycle thru the errors.
 	{"GoInstall", "Alti", (*View).goInstall},
 
-	// Go to symbol definition.
+	// Go to the symbol definition.
 	{"GoDef", "Alt]", (*View).goDef},
+
+	// Navigate back after jumping to the symbol definition.
+	{"GoBack", "Alt[", (*View).goBack},
 
 	// List go definitions for the current file in the split view.
 	{"GoDecls", "Altt", (*View).goDecls},
@@ -628,12 +631,64 @@ func (v *View) openCur(args []string) bool {
 	return true
 }
 
+type location struct {
+	path string
+	loc  Loc
+}
+
+var locations = []location{}
+
+func (v *View) jumpPos(loc location) {
+	destfile, _ := filepath.Abs(loc.path)
+	currfile, _ := filepath.Abs(v.Buf.Path)
+	if currfile != destfile {
+		found := false
+		for i, t := range tabs {
+			currfile, _ = filepath.Abs(t.Views[t.CurView].Buf.Path)
+			if currfile == destfile {
+				found = true
+				curTab = i
+				break
+			}
+		}
+		if !found {
+			v.AddTab(false)
+			CurView().Open(destfile)
+		}
+	}
+
+	CurView().Cursor.GotoLoc(loc.loc)
+	CurView().Cursor.Relocate()
+	CurView().Relocate()
+	CurView().Center(false)
+}
+func (v *View) goBack(args []string) bool {
+	if len(locations) == 0 {
+		messenger.Message("navigation list is empty")
+		return true
+	}
+
+	last := len(locations) - 1
+	loc := locations[last]
+	locations = locations[:last]
+	v.jumpPos(loc)
+
+	return true
+}
+
+func (v *View) rememberPosition() {
+	c := v.Cursor
+	prevloc := location{path: v.Buf.Path, loc: Loc{c.X, c.Y}}
+	locations = append(locations, prevloc)
+	log.Printf("prevloc: %+v", prevloc)
+}
+
 func (v *View) goDef(args []string) bool {
+	v.rememberPosition()
 	c := v.Cursor
 	buf := v.Buf
 	loc := Loc{c.X, c.Y}
 	offset := ByteOffset(loc, buf)
-	log.Printf("godef: %+v", loc)
 
 	cmd := exec.Command("godef", "-f", buf.Path, "-o", strconv.Itoa(offset))
 	out, err := cmd.CombinedOutput()
@@ -687,6 +742,7 @@ var goinstallPlugin struct {
 }
 
 func (v *View) gotoError(ln errorLine) {
+	v.rememberPosition()
 	log.Printf("goto: %s:%d:%d: %s", ln.fname, ln.line, ln.pos, ln.message)
 	if _, err := os.Stat(ln.fname); err != nil {
 		return
@@ -697,7 +753,6 @@ func (v *View) gotoError(ln errorLine) {
 	if ln.pos == 0 {
 		ln.pos = 1
 	}
-
 	errfile, _ := filepath.Abs(ln.fname)
 	currfile, _ := filepath.Abs(v.Buf.Path)
 	if currfile != errfile {
@@ -717,10 +772,7 @@ func (v *View) gotoError(ln errorLine) {
 		}
 	}
 	loc := Loc{ln.pos - 1, ln.line - 1}
-	CurView().Cursor.GotoLoc(loc)
-	CurView().Cursor.Relocate()
-	CurView().Relocate()
-	CurView().Center(false)
+	v.jumpPos(location{path: ln.fname, loc: loc})
 	messenger.Message(fmt.Sprintf("%s:%d:%d: %s", ln.fname, ln.line, ln.pos, ln.message))
 }
 
