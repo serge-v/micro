@@ -20,17 +20,18 @@
 
 Type abbreviation, then space to expand.
 
-| px   | Replacement                               |
-|------|-------------------------------------------|
-| ie   | if err := _                               |
-| ;e   | ;err != nil { _ }                         |
-| re   | return err                                |
-| lf   | log.Fatal(err)                            |
-| tf   | t.Fatal(err)                              |
-| ff   | fmt.Printf("_",)                          |
-| fp   | fmt.Println(_)                            |
-| lp   | log.Println(_)                            |
-| ifr  | if err != nil { return err }_             |
-| ifl  | if err != nil { log.Fatal(err) }          |
-| ifrl | if err := ; err != nil { log.Fatal(err) } |
-| ifrr | if err := ; err != nil { return err }     |
+| abbr | Replacement                    |
+|------|--------------------------------|
+|  ife | if err != nil {  }             |
+|   ie | if err :=                      |
+|   ;e | ;err != nil {  }               |
+|   re | return err                     |
+|   rw | return errors.Wrap(err, "")    |
+|   lf | log.Fatal(err)                 |
+|   tf | t.Fatal(err)                   |
+|   pp | println("=== ")                |
+|   ff | fmt.Printf("",)                |
+|   fp | fmt.Println()                  |
+|   lp | log.Println()                  |
+|   fu | func () { }                    |
+|  ss. | strings                        |

@@ -123,29 +123,38 @@ func replaceAbbrev(view *View, abbrev, replacement string, backpos int) {
 	view.Relocate()
 }
 
-func myPluginsOnRune(view *View, r rune) {
-	abbrevs := []struct {
-		what        string
-		replacement string
-		charsback   int
-	}{
-		{"ife", "if err != nil {\n\t\n\t}\n", -4},
-		{"ie", "if err := ", 0},
-		{";e", ";err != nil {\t\n\t\t\n\t}", -3},
+var abbrevs = []struct {
+	what        string
+	replacement string
+	charsback   int
+}{
+	{"ife", "if err != nil {\n\t\n\t}\n", -4},
+	{"ie", "if err := ", 0},
+	{";e", ";err != nil {\t\n\t\t\n\t}", -3},
 
-		{"re", "return err", 0},
-		{"rw", "return errors.Wrap(err, \"\")", -2},
-		{"lf", "log.Fatal(err)", 0},
-		{"tf", "t.Fatal(err)", 0},
+	{"re", "return err", 0},
+	{"rw", "return errors.Wrap(err, \"\")", -2},
+	{"lf", "log.Fatal(err)", 0},
+	{"tf", "t.Fatal(err)", 0},
 
-		{"pp", "println(\"=== \")", -2},
-		{"ff", "fmt.Printf(\"\",)", -3},
-		{"fp", "fmt.Println()", -1},
-		{"lp", "log.Println()", -1},
+	{"pp", "println(\"=== \")", -2},
+	{"ff", "fmt.Printf(\"\",)", -3},
+	{"fp", "fmt.Println()", -1},
+	{"lp", "log.Println()", -1},
 
-		{"fu", "func () {\n}\n", -7},
+	{"fu", "func () {\n}\n", -7},
+
+	{"ss.", "strings", 1},
+}
+
+func printAbbrevs() {
+	for _, a := range abbrevs {
+		sr := strings.NewReplacer("\n", " ", "\t", "")
+		fmt.Printf("| %4s | %-30s |\n", a.what, sr.Replace(a.replacement))
 	}
+}
 
+func myPluginsOnRune(view *View, r rune) {
 	log.Println("onrune:", r, "["+chars+"]")
 	if r == ' ' {
 		for _, a := range abbrevs {
@@ -992,13 +1001,22 @@ func (v *View) execCommand(args []string) bool {
 		v.Save(false)
 	}
 
-	cmd := exec.Command("bash", "-c", sel)
+	cmdline := strings.Join(args, " ") + " " + sel
+	cmdline = strings.TrimSpace(cmdline)
+	cmd := exec.Command("bash", "-c", cmdline)
+	cmd.Env = append(cmd.Env, "PATH="+os.Getenv("HOME")+"/bin:"+os.Getenv("PATH"))
+	parts := strings.Fields(cmdline)
+	title := parts[0]
+	if len(parts) > 1 {
+		title += "-" + parts[len(parts)-1]
+	}
+
 	buf, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Println("exec:", err)
 		messenger.Error(err.Error())
 	}
-	b := NewBufferFromString(strings.TrimSpace(string(buf)), "Exec: "+sel)
+	b := NewBufferFromString(strings.TrimSpace(string(buf)), "Exec:"+title)
 	v.HSplit(b)
 	setScratch()
 	CurView().handler = func(e *tcell.EventKey) bool { return p.HandleEvent(e) }

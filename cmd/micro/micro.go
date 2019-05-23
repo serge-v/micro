@@ -288,7 +288,9 @@ var flagConfigDir = flag.String("config-dir", "", "Specify a custom location for
 var flagOptions = flag.Bool("options", false, "Show all option help")
 var flagLog = flag.Bool("log", false, "debug log into /tmp/micro.log")
 var flagJumpMode = flag.Bool("jumpmode", false, "Set jump mode for buffers")
+var flagPrintAbbrev = flag.Bool("abbrevs", false, "Print abbreviations")
 var flagAutocomplete = flag.Bool("c", false, "Autocomplete command line")
+var flagInit = flag.Bool("init", false, "Init default config")
 
 func main() {
 	flag.Usage = func() {
@@ -305,6 +307,8 @@ func main() {
 		fmt.Println("    \tWrite debug log to /tmp/micro.log")
 		fmt.Println("-jumpmode")
 		fmt.Println("    \tOn start set the jump mode for the buffers")
+		fmt.Println("-abbrevs")
+		fmt.Println("    \tPrint abbreviations")
 		fmt.Println("-c")
 		fmt.Println("    \tAutocomplete support")
 		fmt.Println("-version")
@@ -344,6 +348,11 @@ func main() {
 		log.SetOutput(ioutil.Discard)
 	}
 
+	if *flagPrintAbbrev {
+		printAbbrevs()
+		return
+	}
+
 	initAutocomplete(acfile, autocompleteScript)
 	if *flagAutocomplete {
 		printAutocomplete()
@@ -375,6 +384,9 @@ func main() {
 
 	// Load the user's settings
 	InitGlobalSettings()
+	if *flagInit {
+		return
+	}
 
 	InitCommands()
 	InitBindings()
