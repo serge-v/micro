@@ -178,10 +178,15 @@ type grepPlugin struct {
 func parseGrepLine(s string) errorLine {
 	el := errorLine{}
 
+	idx := strings.Index(s, "modified:") // hack for git status
+	if idx > 0 {
+		s = s[idx+10:]
+	}
+
 	cc := strings.Split(s, ":")
 
 	if len(cc) > 0 {
-		el.fname = cc[0]
+		el.fname = strings.TrimSpace(cc[0])
 	}
 	if len(cc) > 1 {
 		el.line, _ = strconv.Atoi(cc[1])
@@ -686,6 +691,9 @@ func (v *View) goBack(args []string) bool {
 }
 
 func (v *View) rememberPosition() {
+	if v.Buf.Path == "" {
+		return
+	}
 	c := v.Cursor
 	prevloc := location{path: v.Buf.Path, loc: Loc{c.X, c.Y}}
 	locations = append(locations, prevloc)
@@ -700,9 +708,10 @@ func (v *View) goDef(args []string) bool {
 	offset := ByteOffset(loc, buf)
 
 	cmd := exec.Command("godef", "-f", buf.Path, "-o", strconv.Itoa(offset))
+	log.Println("godef", cmd.Args)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		messenger.Error("godef: " + err.Error())
+		messenger.Error("godef: " + string(out) + " " + err.Error())
 		return false
 	}
 	lines := strings.Split(string(out), "\n")
