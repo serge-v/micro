@@ -133,6 +133,7 @@ var abbrevs = []struct {
 	{";e", ";err != nil {\t\n\t\t\n\t}", -3},
 
 	{"re", "return err", 0},
+	{"rn", "return nil", 0},
 	{"rw", "return errors.Wrap(err, \"\")", -2},
 	{"lf", "log.Fatal(err)", 0},
 	{"tf", "t.Fatal(err)", 0},

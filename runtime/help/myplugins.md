@@ -26,6 +26,7 @@ Type abbreviation, then space to expand.
 |   ie | if err :=                      |
 |   ;e | ;err != nil {  }               |
 |   re | return err                     |
+|   rn | return nil                     |
 |   rw | return errors.Wrap(err, "")    |
 |   lf | log.Fatal(err)                 |
 |   tf | t.Fatal(err)                   |
