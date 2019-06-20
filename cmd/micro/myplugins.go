@@ -799,8 +799,8 @@ func (v *View) goInstall(args []string) bool {
 	p := &goinstallPlugin
 	if p.hasNextErr {
 		p.cur++
-		if len(p.lines) >= p.cur+1 {
-			messenger.Message("no more errors")
+		if p.cur > len(p.lines)-1 {
+			messenger.Message("no more errors ", len(p.lines))
 			p.hasNextErr = false
 			p.cur = 0
 			p.lines = nil
@@ -808,6 +808,7 @@ func (v *View) goInstall(args []string) bool {
 		}
 		ln := p.lines[p.cur]
 		v.gotoError(ln)
+		messenger.Message(fmt.Sprintf("%d/%d %d: %s", p.cur+1, len(p.lines), ln.line, ln.message))
 		return true
 	}
 
@@ -852,11 +853,13 @@ func (v *View) goInstall(args []string) bool {
 		}
 		p.lines = append(p.lines, el)
 	}
+	log.Println("lines:", p.lines)
 	p.cur = 0
 	p.hasNextErr = false
 	if len(p.lines) > 0 {
 		ln := p.lines[0]
 		v.gotoError(ln)
+		messenger.Message(fmt.Sprintf("%d/%d %d: %s", p.cur+1, len(p.lines), ln.line, ln.message))
 		p.hasNextErr = len(p.lines) > 1
 	} else {
 		messenger.Message("no errors")

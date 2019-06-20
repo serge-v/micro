@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"regexp"
 	"strconv"
@@ -9,7 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/yuin/gopher-lua"
+	lua "github.com/yuin/gopher-lua"
 	"github.com/zyedidia/clipboard"
 	"github.com/zyedidia/micro/cmd/micro/shellwords"
 	"github.com/zyedidia/tcell"
@@ -191,6 +192,7 @@ func (v *View) CursorUp(usePlugin bool) bool {
 	}
 
 	v.deselect(0)
+	log.Println("vnum", v.Num, "vtabnum", v.TabNum, v.Cursor)
 	v.Cursor.Up()
 
 	if usePlugin {
