@@ -1192,7 +1192,7 @@ func (v *View) goUpdateBinaries(args []string) bool {
 		"golang.org/x/tools/cmd/goimports",
 		"github.com/rogpeppe/godef",
 		"github.com/fatih/motion",
-		"github.com/mdempsky/gocode",
+		"github.com/stamblerre/gocode",
 	}
 
 	for _, item := range list {
