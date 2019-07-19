@@ -346,6 +346,7 @@ func main() {
 		}
 		defer f.Close()
 		log.SetOutput(f)
+		log.SetFlags(log.Lshortfile | log.LstdFlags)
 	} else {
 		log.SetOutput(ioutil.Discard)
 	}

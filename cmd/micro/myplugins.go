@@ -102,10 +102,24 @@ func myPluginsPostAction(funcName string, view *View, args ...interface{}) {
 		view.setJumpMode([]string{})
 	}
 
+	if funcName == "Save" && view.Buf.FileType() == "go" {
+		goinstallPlugin.hasNextErr = false
+		view.goInstall([]string{})
+	}
+
 	chars = ""
 }
 
 var chars string
+var myout io.Writer
+
+func init() {
+	var err error
+	myout, err = os.Create("/tmp/myplugins.txt")
+	if err != nil {
+		log.Panic(err)
+	}
+}
 
 func replaceAbbrev(view *View, abbrev, replacement string, backpos int) {
 	c := &view.Buf.Cursor
@@ -149,6 +163,10 @@ var abbrevs = []struct {
 	{"fu", "func () {\n}\n", -7},
 
 	{"ss.", "strings", 1},
+	{"iour", "ioutil.ReadAll()", -1},
+	{"iouw", "ioutil.WriteAll()", -1},
+	{"iourf", "ioutil.ReadFile(fname)", -1},
+	{"iouwf", "ioutil.WriteFile(fname,,0600)", -6},
 }
 
 func printAbbrevs() {
@@ -830,6 +848,12 @@ func (v *View) goInstall(args []string) bool {
 	if err != nil {
 		log.Println("build:", err)
 		messenger.Error(err.Error())
+	}
+	if len(buf) == 0 {
+		myout.Write([]byte("no errors\n\n"))
+	} else {
+		myout.Write(buf)
+
 	}
 	lines := strings.Split(string(buf), "\n")
 	for _, ln := range lines {
