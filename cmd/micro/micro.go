@@ -6,15 +6,17 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/go-errors/errors"
 	"github.com/mattn/go-isatty"
 	"github.com/mitchellh/go-homedir"
-	"github.com/yuin/gopher-lua"
+	lua "github.com/yuin/gopher-lua"
 	"github.com/zyedidia/clipboard"
 	"github.com/zyedidia/micro/cmd/micro/terminfo"
 	"github.com/zyedidia/tcell"
@@ -405,6 +407,16 @@ func main() {
 			fmt.Print(errors.Wrap(err, 2).ErrorStack())
 			os.Exit(1)
 		}
+	}()
+
+	// Handle shutdown
+	go func() {
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+		err := fmt.Errorf("signal: %s", <-c)
+		screen.Fini()
+		fmt.Print(err)
+		os.Exit(1)
 	}()
 
 	// Create a new messenger
