@@ -157,8 +157,8 @@ var abbrevs = []struct {
 	{"fp", "fmt.Println()", -1},
 
 	{"lp", "log.Println()", -1},
-	{"lp", "log.Panic(err)", 0},
-	{"lf", "log.Printf()", -1},
+	{"lpf", "log.Printf(\"\",)", -3},
+	{"lf", "log.Fatal()", -1},
 
 	{"fu", "func () {\n}\n", -7},
 
