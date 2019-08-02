@@ -142,6 +142,8 @@ var abbrevs = []struct {
 	replacement string
 	charsback   int
 }{
+	{"aa", "append()", -1},
+
 	{"ife", "if err != nil {\n\t\n\t}\n", -4},
 	{"ie", "if err := ", 0},
 	{";e", ";err != nil {\t\n\t\t\n\t}", -3},
@@ -149,6 +151,7 @@ var abbrevs = []struct {
 	{"re", "return err", 0},
 	{"rn", "return nil", 0},
 	{"rw", "return errors.Wrap(err, \"\")", -2},
+	{"tlf", "t.Logf(\"\",)", -3},
 	{"tf", "t.Fatal(err)", 0},
 
 	{"pp", "println(\"=== \")", -2},
@@ -163,16 +166,16 @@ var abbrevs = []struct {
 	{"fu", "func () {\n}\n", -7},
 
 	{"ss.", "strings", 1},
-	{"iour", "ioutil.ReadAll()", -1},
-	{"iouw", "ioutil.WriteAll()", -1},
-	{"iourf", "ioutil.ReadFile(fname)", -1},
-	{"iouwf", "ioutil.WriteFile(fname,,0600)", -6},
+	{"ra", "ioutil.ReadAll()", -1},
+	{"wa", "ioutil.WriteAll()", -1},
+	{"rf", "ioutil.ReadFile(fname)", -1},
+	{"wf", "ioutil.WriteFile(fname,,0600)", -6},
 }
 
 func printAbbrevs() {
 	for _, a := range abbrevs {
 		sr := strings.NewReplacer("\n", " ", "\t", "")
-		fmt.Printf("| %4s | %-30s |\n", a.what, sr.Replace(a.replacement))
+		fmt.Printf("| %6s | %-32s |\n", a.what, sr.Replace(a.replacement))
 	}
 }
 
