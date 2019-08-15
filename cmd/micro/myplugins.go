@@ -97,15 +97,17 @@ func bindMyKeys(def map[string]string) {
 func myPluginsPostAction(funcName string, view *View, args ...interface{}) {
 	log.Println("postaction:", funcName, "type:", view.Buf.FileType())
 
-	if funcName == "OpenFile" && strings.HasSuffix(view.Buf.Path, ".err") {
-		view.Buf.Settings["filetype"] = "err"
-		view.setJumpMode([]string{})
+	if funcName == "OpenFile" {
+		if strings.HasSuffix(view.Buf.Path, ".err") || strings.HasPrefix(view.Buf.buf.Line(0), "--==") {
+			view.Buf.Settings["filetype"] = "err"
+			view.setJumpMode([]string{})
+		}
 	}
 
-	if funcName == "Save" && view.Buf.FileType() == "go" {
-		goinstallPlugin.hasNextErr = false
-		view.goInstall([]string{})
-	}
+	//	if funcName == "Save" && view.Buf.FileType() == "go" {
+	//		goinstallPlugin.hasNextErr = false
+	//		view.goInstall([]string{})
+	//	}
 
 	chars = ""
 }
@@ -143,6 +145,7 @@ var abbrevs = []struct {
 	charsback   int
 }{
 	{"aa", "append()", -1},
+	{"tt", "t*testing.T", -1},
 
 	{"ife", "if err != nil {\n\t\n\t}\n", -4},
 	{"ie", "if err := ", 0},
