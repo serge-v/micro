@@ -1035,7 +1035,7 @@ type execPlugin struct {
 func (v *View) execCommand(args []string) bool {
 	sel := v.Cursor.GetSelection()
 	if sel == "" {
-		v.Cursor.SelectWord()
+		v.Cursor.SelectLine()
 		sel = v.Cursor.GetSelection()
 	}
 	if sel == "" {
