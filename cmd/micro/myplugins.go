@@ -113,15 +113,6 @@ func myPluginsPostAction(funcName string, view *View, args ...interface{}) {
 }
 
 var chars string
-var myout io.Writer
-
-func init() {
-	var err error
-	myout, err = os.Create("/tmp/myplugins.txt")
-	if err != nil {
-		log.Panic(err)
-	}
-}
 
 func replaceAbbrev(view *View, abbrev, replacement string, backpos int) {
 	c := &view.Buf.Cursor
@@ -854,12 +845,6 @@ func (v *View) goInstall(args []string) bool {
 	if err != nil {
 		log.Println("build:", err)
 		messenger.Error(err.Error())
-	}
-	if len(buf) == 0 {
-		myout.Write([]byte("no errors\n\n"))
-	} else {
-		myout.Write(buf)
-
 	}
 	lines := strings.Split(string(buf), "\n")
 	for _, ln := range lines {
