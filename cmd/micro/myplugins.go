@@ -236,7 +236,7 @@ func (v *View) findInFiles(args []string) bool {
 		v.Save(false)
 	}
 
-	cmd := exec.Command("grep", sel, "-m", "100", "--exclude-dir", "vendor", "-n", "-R", ".")
+	cmd := exec.Command("grep", sel, "-m", "100", "--binary-files=without-match", "--exclude-dir", "vendor", "-n", "-R", ".")
 	buf, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Println("build:", err)
