@@ -1091,9 +1091,6 @@ func (v *View) textFilter(args []string) bool {
 		v.Cursor.SelectWord()
 		sel = v.Cursor.GetSelection()
 	}
-	if sel == "" {
-		return true
-	}
 	var bout, berr bytes.Buffer
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdin = strings.NewReader(sel)
