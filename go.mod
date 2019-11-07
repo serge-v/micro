@@ -8,6 +8,7 @@ require (
 	github.com/fatih/motion v1.0.0
 	github.com/flynn/json5 v0.0.0-20160717195620-7620272ed633
 	github.com/gdamore/encoding v1.0.0 // indirect
+	github.com/go-bindata/go-bindata v3.1.2+incompatible // indirect
 	github.com/go-errors/errors v1.0.1
 	github.com/jteeuwen/go-bindata v3.0.7+incompatible // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
