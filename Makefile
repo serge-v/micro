@@ -34,6 +34,10 @@ install-quick:
 
 update:
 	git pull
+	go get -u -v golang.org/x/tools/cmd/goimports
+	go get -u -v github.com/rogpeppe/godef
+	go get -u -v github.com/fatih/motion
+	go get -u -v github.com/stamblerre/gocode
 
 # Builds the runtime
 runtime:

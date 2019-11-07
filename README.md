@@ -1,22 +1,22 @@
-## Fork changes
+## Experimental features
 
-This is a fork of the micro editor with experimental features for golang development.
-Changes include:
-
- - Added commands for golang development.
- - Added abbreviations for golang development.
+ - golang autocomplete.
+ - golang go to definition.
+ - go back from definition.
+ - show all declarations in the current go file.
+ - run golang install or jump to the error.
+ - run text selection through the filter.
+ - execute selection as shell command.
 
 ### Commands
 
 | Key         | Command    | Description
 |-------------|------------|------------------------------------------------|
-|             | goupdate   | Update external golang tools                   |
 | Alt+i       | goinstall  | Run go install or go to the next error         |
 | Alt+]       | godef      | Go to the symbol definition                    |
 | Alt+[       | goback     | Go back after the symbol definition            |
 | Alt+t       | godecls    | Show declarations for the current file         |
 | Ctrl+Space  | gocomplete | Show go completion list                        |
-| Alt+o       | opencur    | Open current directory list in the vertical split view |
 | Alt+l       | selectnext | Search for the next occurence of the word under cursor |
 |             | findinfiles| Search word under cursor in ./... files        |
 |             | setjumpmode| Set buffer mode to jump to the errors on enter |
