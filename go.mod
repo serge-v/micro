@@ -1,6 +1,6 @@
 module github.com/serge-v/micro
 
-go 1.12
+go 1.13
 
 require (
 	github.com/blang/semver v3.5.1+incompatible
@@ -10,7 +10,7 @@ require (
 	github.com/gdamore/encoding v1.0.0 // indirect
 	github.com/go-errors/errors v1.0.1
 	github.com/kylelemons/godebug v1.1.0 // indirect
-	github.com/lucasb-eyer/go-colorful v1.0.2 // indirect
+	github.com/lucasb-eyer/go-colorful v1.0.3-0.20191102062235-fadcb7c7fa1e // indirect
 	github.com/mattn/go-isatty v0.0.10
 	github.com/mattn/go-runewidth v0.0.6
 	github.com/mitchellh/go-homedir v1.1.0
