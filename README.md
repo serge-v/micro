@@ -1,12 +1,15 @@
 ## Experimental features
 
  - golang autocomplete.
- - golang go to definition.
- - go back from definition.
- - show all declarations in the current go file.
- - run golang install or jump to the error.
- - run text selection through the filter.
- - execute selection as shell command.
+ - golang abbreviations for quick typing.
+ - golang go to the symbol definition.
+ - go back from the definition.
+ - show all declarations in the current file.
+ - run golang install and jump to the error.
+ - pipe text selection through the shell command.
+ - execute selection as a shell command.
+ - find in files command.
+ - view jumpmode similar to vim quickfix mode. 
 
 ### Commands
 
@@ -50,6 +53,8 @@ go get -d github.com/serge-v/micro/cmd/micro
 cd $GOPATH/src/github.com/serge-v/micro
 make install
 ```
+
+Make installs goimports, gocode, godef, motion tools.
 
 #### === original README ====
 
