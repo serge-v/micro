@@ -32,7 +32,7 @@ require (
 	github.com/zyedidia/pty v1.1.2-0.20180126010845-30364665a244 // indirect
 	github.com/zyedidia/tcell v0.0.0-20190212015332-5c58b4edc169
 	github.com/zyedidia/terminal v0.0.0-20180726154117-533c623e2415
-	golang.org/x/tools v0.0.0-20191107010934-f79515f33823 // indirect
+	golang.org/x/tools v0.0.0-20191108193012-7d206e10da11 // indirect
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 	gopkg.in/yaml.v2 v2.2.5
 	layeh.com/gopher-luar v1.0.7
