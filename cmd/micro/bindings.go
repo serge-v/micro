@@ -583,6 +583,7 @@ func DefaultBindings() map[string]string {
 		"CtrlU":          "ToggleMacro",
 		"CtrlJ":          "PlayMacro",
 		"Insert":         "ToggleOverwriteMode",
+		"Altz":           "Center",
 
 		// Emacs-style keybindings
 		"Alt-f": "WordRight",
