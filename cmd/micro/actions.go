@@ -2202,6 +2202,7 @@ func (v *View) SpawnMultiCursorSelect(usePlugin bool) bool {
 		var startLine int
 		var endLine int
 
+		x := v.Cursor.CurSelection[0].X
 		a, b := v.Cursor.CurSelection[0].Y, v.Cursor.CurSelection[1].Y
 		if a > b {
 			startLine, endLine = b, a
@@ -2211,13 +2212,13 @@ func (v *View) SpawnMultiCursorSelect(usePlugin bool) bool {
 
 		if v.Cursor.HasSelection() {
 			v.Cursor.ResetSelection()
-			v.Cursor.GotoLoc(Loc{0, startLine})
+			v.Cursor.GotoLoc(Loc{x, startLine})
 
 			for i := startLine; i <= endLine; i++ {
 				c := &Cursor{
 					buf: v.Buf,
 				}
-				c.GotoLoc(Loc{0, i})
+				c.GotoLoc(Loc{x, i})
 				v.Buf.cursors = append(v.Buf.cursors, c)
 			}
 			v.Buf.MergeCursors()

@@ -489,6 +489,7 @@ func (v *View) goComplete(args []string) bool {
 	loc := Loc{c.X, c.Y}
 	offset := ByteOffset(loc, buf)
 	cmd := exec.Command("gocode", "-in", buf.Path, "autocomplete", strconv.Itoa(offset))
+	log.Printf("%v", cmd.Args)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		messenger.Error("gocode: ", err.Error())
