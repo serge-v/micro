@@ -171,8 +171,8 @@ func printAbbrevs() {
 }
 
 func myPluginsOnRune(view *View, r rune) {
-	log.Println("onrune:", r, "["+chars+"]")
 	if r == ' ' {
+		log.Println("onrune abbrev:", r, "["+chars+"]")
 		for _, a := range abbrevs {
 			if chars == a.what {
 				replaceAbbrev(view, a.what, a.replacement, a.charsback)
@@ -182,7 +182,12 @@ func myPluginsOnRune(view *View, r rune) {
 		chars = ""
 		return
 	}
+	if r == '=' {
+		chars = ""
+		return
+	}
 	chars += string(r)
+	log.Println("onrune:", r, "["+chars+"]")
 }
 
 // grep plugin
