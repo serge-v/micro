@@ -62,9 +62,6 @@ var myPlugins = []pluginDef{
 
 	// Exec command under the cursor and open result in the quick view.
 	{"ExecCommand", "", (*View).execCommand},
-
-	// TextFilter command passes text selection into the filter like 'textfilter sort'.
-	{"TextFilter", "", (*View).textFilter},
 }
 
 func addMyPlugins(m map[string]StrCommand) {
@@ -1076,34 +1073,6 @@ func (g *execPlugin) HandleEvent(e *tcell.EventKey) bool {
 		return false
 	}
 
-	return true
-}
-
-// text filter
-
-func (v *View) textFilter(args []string) bool {
-	if len(args) == 0 {
-		messenger.Error("usage: textfilter arguments")
-		return true
-	}
-	log.Println("TextFilter command", args)
-	sel := v.Cursor.GetSelection()
-	if sel == "" {
-		v.Cursor.SelectWord()
-		sel = v.Cursor.GetSelection()
-	}
-	var bout, berr bytes.Buffer
-	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Stdin = strings.NewReader(sel)
-	cmd.Stderr = &berr
-	cmd.Stdout = &bout
-	err := cmd.Run()
-	if err != nil {
-		messenger.Error(err.Error() + " " + berr.String())
-		return true
-	}
-	v.Cursor.DeleteSelection()
-	v.Buf.Insert(v.Cursor.Loc, bout.String())
 	return true
 }
 
