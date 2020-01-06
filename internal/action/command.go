@@ -66,10 +66,11 @@ func InitCommands() {
 		"retab":      {(*BufPane).RetabCmd, nil},
 		"raw":        {(*BufPane).RawCmd, nil},
 		"textfilter": {(*BufPane).TextFilterCmd, nil},
+		"exec":       {(*BufPane).ExecCmd, buffer.FileComplete},
 	}
 }
 
-// MakeCommand is a function to easily create new commands
+// LuaMakeCommand is a function to easily create new commands
 // This can be called by plugins in Lua so that plugins can define their own commands
 func LuaMakeCommand(name, function string, completer buffer.Completer) {
 	action := LuaFunctionCommand(function)
