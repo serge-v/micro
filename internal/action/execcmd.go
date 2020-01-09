@@ -27,11 +27,14 @@ func (h *BufPane) ExecCmd(args []string) {
 	}
 
 	// substitute parameters
-	
+
 	var list []string
-	var offset string
-	
+	loc := buffer.Loc{h.Cursor.X, h.Cursor.Y}
+	offs := buffer.ByteOffset(loc, h.Buf)
+	offset := strconv.Itoa(offs)
+
 	for _, a := range args {
+		log.Println("arg", a)
 		switch {
 		case a == "{s}" && h.Cursor.HasSelection():
 			a = string(h.Cursor.GetSelection())
@@ -43,11 +46,7 @@ func (h *BufPane) ExecCmd(args []string) {
 				continue
 			}
 		case a == "{o}":
-			c := h.Cursor
-			buf := h.Buf
-			loc := buffer.Loc{c.X, c.Y}
-			offs := buffer.ByteOffset(loc, buf)
-			offset = strconv.Itoa(offs)
+			a = offset
 		case a == "{f}":
 			a = h.Buf.AbsPath
 		}
@@ -58,8 +57,8 @@ func (h *BufPane) ExecCmd(args []string) {
 
 	cmd := exec.Command(list[0], list[1:]...)
 	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, "MICRO_FILE_PATH="+ h.Buf.AbsPath)
-	cmd.Env = append(cmd.Env, "MICRO_FILE_OFFSET="+ offset)
+	cmd.Env = append(cmd.Env, "MICRO_FILE_PATH="+h.Buf.AbsPath)
+	cmd.Env = append(cmd.Env, "MICRO_FILE_OFFSET="+offset)
 
 	buf, err := cmd.CombinedOutput()
 	if err != nil {
@@ -68,7 +67,7 @@ func (h *BufPane) ExecCmd(args []string) {
 	}
 
 	// create horizontal pane with output text
-	 
+
 	b := buffer.NewBufferFromString(strings.TrimSpace(string(buf)), list[0], buffer.BTLog)
 	e := &qfixPane{
 		BufPane: NewBufPaneFromBuf(b),
