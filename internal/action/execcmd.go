@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/zyedidia/micro/internal/buffer"
 	"github.com/zyedidia/tcell"
@@ -17,6 +18,8 @@ type qfixPane struct {
 	*BufPane
 	filter string
 	text   string
+	gocode bool
+	target *BufPane
 }
 
 // ExecCmd executes the command with arguments from the current directory.
@@ -72,6 +75,8 @@ func (h *BufPane) ExecCmd(args []string) {
 	e := &qfixPane{
 		BufPane: NewBufPaneFromBuf(b),
 		text:    string(buf),
+		gocode:  args[0] == "gocode",
+		target:  h,
 	}
 
 	e.splitID = MainTab().GetNode(h.splitID).HSplit(h.Buf.Settings["splitbottom"].(bool))
@@ -92,10 +97,14 @@ func (h *qfixPane) HandleEvent(event tcell.Event) {
 				h.filter = h.filter[:len(h.filter)-1]
 			}
 		case tcell.KeyEnter:
-			c := h.Cursor
-			line := h.Buf.Line(c.Y)
-			gl := parseGrepLine(line)
-			h.jumpToLine(gl)
+			if h.gocode {
+				h.autocompleteLine()
+			} else {
+				c := h.Cursor
+				line := h.Buf.Line(c.Y)
+				gl := parseGrepLine(line)
+				h.jumpToLine(gl)
+			}
 			return
 		case tcell.KeyEsc:
 			h.Quit()
@@ -110,6 +119,38 @@ func (h *qfixPane) HandleEvent(event tcell.Event) {
 	}
 
 	h.BufPane.HandleEvent(event)
+}
+
+func (h *qfixPane) autocompleteLine() {
+	c := h.Cursor
+	line := h.Buf.Line(c.Y)
+	h.Quit()
+	fields := strings.FieldsFunc(line, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	})
+	if len(fields) < 2 {
+		return
+	}
+
+	c = h.target.Cursor
+	targetLine := h.target.Buf.Line(c.Y)
+	prefix := getLeftChunk(targetLine, c.X)
+	ident := fields[1]
+	ident = strings.TrimPrefix(ident, prefix)
+	h.target.Buf.Insert(buffer.Loc{c.X, c.Y}, ident)
+	InfoBar.Message(line)
+}
+
+func getLeftChunk(line string, pos int) string {
+	line = line[:pos]
+	cc := strings.FieldsFunc(line, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	})
+	if len(cc) == 0 {
+		return ""
+	}
+	last := cc[len(cc)-1]
+	return last
 }
 
 func (h *qfixPane) jumpToLine(ln grepLine) {
