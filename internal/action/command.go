@@ -121,106 +121,20 @@ func CommandAction(cmd string) BufKeyAction {
 	}
 }
 
-var PluginCmds = []string{"list", "info", "version"}
+var PluginCmds = []string{"install", "remove", "update", "available", "list", "search"}
 
 // PluginCmd installs, removes, updates, lists, or searches for given plugins
 func (h *BufPane) PluginCmd(args []string) {
-	if len(args) <= 0 {
-		InfoBar.Error("Not enough arguments, see 'help commands'")
+	if len(args) < 1 {
+		InfoBar.Error("Not enough arguments")
 		return
 	}
 
-	valid := true
-	switch args[0] {
-	case "list":
-		for _, pl := range config.Plugins {
-			var en string
-			if pl.IsEnabled() {
-				en = "enabled"
-			} else {
-				en = "disabled"
-			}
-			WriteLog(fmt.Sprintf("%s: %s", pl.Name, en))
-			if pl.Default {
-				WriteLog(" (default)\n")
-			} else {
-				WriteLog("\n")
-			}
-		}
-		WriteLog("Default plugins come pre-installed with micro.")
-	case "version":
-		if len(args) <= 1 {
-			InfoBar.Error("No plugin provided to give info for")
-			return
-		}
-		found := false
-		for _, pl := range config.Plugins {
-			if pl.Name == args[1] {
-				found = true
-				if pl.Info == nil {
-					InfoBar.Message("Sorry no version for", pl.Name)
-					return
-				}
-
-				WriteLog("Version: " + pl.Info.Vstr + "\n")
-			}
-		}
-		if !found {
-			InfoBar.Message(args[1], "is not installed")
-		}
-	case "info":
-		if len(args) <= 1 {
-			InfoBar.Error("No plugin provided to give info for")
-			return
-		}
-		found := false
-		for _, pl := range config.Plugins {
-			if pl.Name == args[1] {
-				found = true
-				if pl.Info == nil {
-					InfoBar.Message("Sorry no info for ", pl.Name)
-					return
-				}
-
-				var buffer bytes.Buffer
-				buffer.WriteString("Name: ")
-				buffer.WriteString(pl.Info.Name)
-				buffer.WriteString("\n")
-				buffer.WriteString("Description: ")
-				buffer.WriteString(pl.Info.Desc)
-				buffer.WriteString("\n")
-				buffer.WriteString("Website: ")
-				buffer.WriteString(pl.Info.Site)
-				buffer.WriteString("\n")
-				buffer.WriteString("Installation link: ")
-				buffer.WriteString(pl.Info.Install)
-				buffer.WriteString("\n")
-				buffer.WriteString("Version: ")
-				buffer.WriteString(pl.Info.Vstr)
-				buffer.WriteString("\n")
-				buffer.WriteString("Requirements:")
-				buffer.WriteString("\n")
-				for _, r := range pl.Info.Require {
-					buffer.WriteString("    - ")
-					buffer.WriteString(r)
-					buffer.WriteString("\n")
-				}
-
-				WriteLog(buffer.String())
-			}
-		}
-		if !found {
-			InfoBar.Message(args[1], "is not installed")
-			return
-		}
-	default:
-		InfoBar.Error("Not a valid plugin command")
-		return
-	}
-
-	if valid && h.Buf.Type != buffer.BTLog {
+	if h.Buf.Type != buffer.BTLog {
 		OpenLogBuf(h)
 	}
+
+	config.PluginCommand(buffer.LogBuf, args[0], args[1:])
 }
 
 // RetabCmd changes all spaces to tabs or all tabs to spaces
@@ -234,7 +148,7 @@ func (h *BufPane) RetabCmd(args []string) {
 func (h *BufPane) RawCmd(args []string) {
 	width, height := screen.Screen.Size()
 	iOffset := config.GetInfoBarOffset()
-	tp := NewTabFromPane(0, 0, width, height-iOffset, NewRawPane())
+	tp := NewTabFromPane(0, 0, width, height-iOffset, NewRawPane(nil))
 	Tabs.AddTab(tp)
 	Tabs.SetActive(len(Tabs.List) - 1)
 }
@@ -528,45 +442,55 @@ func (h *BufPane) NewTabCmd(args []string) {
 }
 
 func SetGlobalOptionNative(option string, nativeValue interface{}) error {
-	config.GlobalSettings[option] = nativeValue
+	local := false
+	for _, s := range config.LocalSettings {
+		if s == option {
+			local = true
+			break
+		}
+	}
 
-	if option == "colorscheme" {
-		// LoadSyntaxFiles()
-		config.InitColorscheme()
-		for _, b := range buffer.OpenBuffers {
-			b.UpdateRules()
-		}
-	} else if option == "infobar" || option == "keymenu" {
-		Tabs.Resize()
-	} else if option == "mouse" {
-		if !nativeValue.(bool) {
-			screen.Screen.DisableMouse()
+	if !local {
+		config.GlobalSettings[option] = nativeValue
+
+		if option == "colorscheme" {
+			// LoadSyntaxFiles()
+			config.InitColorscheme()
+			for _, b := range buffer.OpenBuffers {
+				b.UpdateRules()
+			}
+		} else if option == "infobar" || option == "keymenu" {
+			Tabs.Resize()
+		} else if option == "mouse" {
+			if !nativeValue.(bool) {
+				screen.Screen.DisableMouse()
+			} else {
+				screen.Screen.EnableMouse()
+			}
+			// autosave option has been removed
+			// } else if option == "autosave" {
+			// 	if nativeValue.(float64) > 0 {
+			// 		config.SetAutoTime(int(nativeValue.(float64)))
+			// 		config.StartAutoSave()
+			// 	} else {
+			// 		config.SetAutoTime(0)
+			// 	}
+		} else if option == "paste" {
+			screen.Screen.SetPaste(nativeValue.(bool))
 		} else {
-			screen.Screen.EnableMouse()
-		}
-		// autosave option has been removed
-		// } else if option == "autosave" {
-		// 	if nativeValue.(float64) > 0 {
-		// 		config.SetAutoTime(int(nativeValue.(float64)))
-		// 		config.StartAutoSave()
-		// 	} else {
-		// 		config.SetAutoTime(0)
-		// 	}
-	} else if option == "paste" {
-		screen.Screen.SetPaste(nativeValue.(bool))
-	} else {
-		for _, pl := range config.Plugins {
-			if option == pl.Name {
-				if nativeValue.(bool) && !pl.Loaded {
-					pl.Load()
-					_, err := pl.Call("init")
-					if err != nil && err != config.ErrNoSuchFunction {
-						screen.TermMessage(err)
-					}
-				} else if !nativeValue.(bool) && pl.Loaded {
-					_, err := pl.Call("deinit")
-					if err != nil && err != config.ErrNoSuchFunction {
-						screen.TermMessage(err)
+			for _, pl := range config.Plugins {
+				if option == pl.Name {
+					if nativeValue.(bool) && !pl.Loaded {
+						pl.Load()
+						_, err := pl.Call("init")
+						if err != nil && err != config.ErrNoSuchFunction {
+							screen.TermMessage(err)
+						}
+					} else if !nativeValue.(bool) && pl.Loaded {
+						_, err := pl.Call("deinit")
+						if err != nil && err != config.ErrNoSuchFunction {
+							screen.TermMessage(err)
+						}
 					}
 				}
 			}
@@ -907,7 +831,7 @@ func (h *BufPane) ReplaceAllCmd(args []string) {
 
 // TermCmd opens a terminal in the current view
 func (h *BufPane) TermCmd(args []string) {
-	ps := MainTab().Panes
+	ps := h.tab.Panes
 
 	if len(args) == 0 {
 		sh := os.Getenv("SHELL")
@@ -932,7 +856,7 @@ func (h *BufPane) TermCmd(args []string) {
 		}
 
 		v := h.GetView()
-		MainTab().Panes[i] = NewTermPane(v.X, v.Y, v.Width, v.Height, t, id)
+		MainTab().Panes[i] = NewTermPane(v.X, v.Y, v.Width, v.Height, t, id, MainTab())
 		MainTab().SetActive(i)
 	}
 

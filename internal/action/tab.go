@@ -91,6 +91,7 @@ func (t *TabList) Resize() {
 		t.List[0].Node.Resize(w, h-iOffset)
 		t.List[0].Resize()
 	}
+	t.TabWindow.Resize(w, h)
 }
 
 // HandleEvent checks for a resize event or a mouse event on the tab bar
@@ -166,7 +167,7 @@ func NewTabFromBuffer(x, y, width, height int, b *buffer.Buffer) *Tab {
 	t.Node = views.NewRoot(x, y, width, height)
 	t.UIWindow = display.NewUIWindow(t.Node)
 
-	e := NewBufPaneFromBuf(b)
+	e := NewBufPaneFromBuf(b, t)
 	e.SetID(t.ID())
 
 	t.Panes = append(t.Panes, e)
@@ -177,7 +178,7 @@ func NewTabFromPane(x, y, width, height int, pane Pane) *Tab {
 	t := new(Tab)
 	t.Node = views.NewRoot(x, y, width, height)
 	t.UIWindow = display.NewUIWindow(t.Node)
-
+	pane.SetTab(t)
 	pane.SetID(t.ID())
 
 	t.Panes = append(t.Panes, pane)
@@ -195,7 +196,6 @@ func (t *Tab) HandleEvent(event tcell.Event) {
 		mx, my := e.Position()
 		switch e.Buttons() {
 		case tcell.Button1:
-			resizeID := t.GetMouseSplitID(buffer.Loc{mx, my})
 			if t.resizing != nil {
 				var size int
 				if t.resizing.Kind == views.STVert {
@@ -208,6 +208,7 @@ func (t *Tab) HandleEvent(event tcell.Event) {
 				return
 			}
 
+			resizeID := t.GetMouseSplitID(buffer.Loc{mx, my})
 			if resizeID != 0 {
 				t.resizing = t.GetNode(uint64(resizeID))
 				return
@@ -283,6 +284,10 @@ func (t *Tab) Resize() {
 }
 
 // CurPane returns the currently active pane
-func (t *Tab) CurPane() Pane {
-	return t.Panes[t.active]
+func (t *Tab) CurPane() *BufPane {
+	p, ok := t.Panes[t.active].(*BufPane)
+	if !ok {
+		return nil
+	}
+	return p
 }

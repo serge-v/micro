@@ -21,6 +21,7 @@ func init() {
 	ulua.L.SetGlobal("import", luar.New(ulua.L, LuaImport))
 }
 
+// LuaImport is meant to be called from lua by a plugin and will import the given micro package
 func LuaImport(pkg string) *lua.LTable {
 	switch pkg {
 	case "micro":
@@ -46,6 +47,12 @@ func luaImportMicro() *lua.LTable {
 	ulua.L.SetField(pkg, "InfoBar", luar.New(ulua.L, action.GetInfoBar))
 	ulua.L.SetField(pkg, "Log", luar.New(ulua.L, log.Println))
 	ulua.L.SetField(pkg, "SetStatusInfoFn", luar.New(ulua.L, display.SetStatusInfoFnLua))
+	ulua.L.SetField(pkg, "CurPane", luar.New(ulua.L, func() action.Pane {
+		return action.MainTab().CurPane()
+	}))
+	ulua.L.SetField(pkg, "CurTab", luar.New(ulua.L, func() *action.Tab {
+		return action.MainTab()
+	}))
 
 	return pkg
 }
@@ -62,16 +69,17 @@ func luaImportMicroConfig() *lua.LTable {
 	ulua.L.SetField(pkg, "TryBindKey", luar.New(ulua.L, action.TryBindKey))
 	ulua.L.SetField(pkg, "Reload", luar.New(ulua.L, action.ReloadConfig))
 	ulua.L.SetField(pkg, "AddRuntimeFileFromMemory", luar.New(ulua.L, config.PluginAddRuntimeFileFromMemory))
-	ulua.L.SetField(pkg, "AddRuntimeFilesFromDirectory", luar.New(ulua.L, config.PluginAddRuntimeFileFromMemory))
+	ulua.L.SetField(pkg, "AddRuntimeFilesFromDirectory", luar.New(ulua.L, config.PluginAddRuntimeFilesFromDirectory))
 	ulua.L.SetField(pkg, "AddRuntimeFile", luar.New(ulua.L, config.PluginAddRuntimeFile))
 	ulua.L.SetField(pkg, "ListRuntimeFiles", luar.New(ulua.L, config.PluginListRuntimeFiles))
 	ulua.L.SetField(pkg, "ReadRuntimeFile", luar.New(ulua.L, config.PluginReadRuntimeFile))
+	ulua.L.SetField(pkg, "NewRTFiletype", luar.New(ulua.L, config.NewRTFiletype))
 	ulua.L.SetField(pkg, "RTColorscheme", luar.New(ulua.L, config.RTColorscheme))
 	ulua.L.SetField(pkg, "RTSyntax", luar.New(ulua.L, config.RTSyntax))
 	ulua.L.SetField(pkg, "RTHelp", luar.New(ulua.L, config.RTHelp))
 	ulua.L.SetField(pkg, "RTPlugin", luar.New(ulua.L, config.RTPlugin))
-	ulua.L.SetField(pkg, "RegisterCommonOption", luar.New(ulua.L, config.RegisterCommonOption))
-	ulua.L.SetField(pkg, "RegisterGlobalOption", luar.New(ulua.L, config.RegisterGlobalOption))
+	ulua.L.SetField(pkg, "RegisterCommonOption", luar.New(ulua.L, config.RegisterCommonOptionPlug))
+	ulua.L.SetField(pkg, "RegisterGlobalOption", luar.New(ulua.L, config.RegisterGlobalOptionPlug))
 	ulua.L.SetField(pkg, "GetGlobalOption", luar.New(ulua.L, config.GetGlobalOption))
 	ulua.L.SetField(pkg, "SetGlobalOption", luar.New(ulua.L, action.SetGlobalOption))
 	ulua.L.SetField(pkg, "SetGlobalOptionNative", luar.New(ulua.L, action.SetGlobalOptionNative))
@@ -113,10 +121,15 @@ func luaImportMicroBuffer() *lua.LTable {
 	ulua.L.SetField(pkg, "BTScratch", luar.New(ulua.L, buffer.BTScratch.Kind))
 	ulua.L.SetField(pkg, "BTRaw", luar.New(ulua.L, buffer.BTRaw.Kind))
 	ulua.L.SetField(pkg, "BTInfo", luar.New(ulua.L, buffer.BTInfo.Kind))
+	ulua.L.SetField(pkg, "NewBuffer", luar.New(ulua.L, func(text, path string) *buffer.Buffer {
+		return buffer.NewBufferFromString(text, path, buffer.BTDefault)
+	}))
 	ulua.L.SetField(pkg, "NewBufferFromFile", luar.New(ulua.L, func(path string) (*buffer.Buffer, error) {
 		return buffer.NewBufferFromFile(path, buffer.BTDefault)
 	}))
 	ulua.L.SetField(pkg, "ByteOffset", luar.New(ulua.L, buffer.ByteOffset))
+	ulua.L.SetField(pkg, "Log", luar.New(ulua.L, buffer.WriteLog))
+	ulua.L.SetField(pkg, "LogBuf", luar.New(ulua.L, buffer.GetLogBuf))
 
 	return pkg
 }
@@ -127,6 +140,10 @@ func luaImportMicroUtil() *lua.LTable {
 	ulua.L.SetField(pkg, "RuneAt", luar.New(ulua.L, util.LuaRuneAt))
 	ulua.L.SetField(pkg, "GetLeadingWhitespace", luar.New(ulua.L, util.LuaGetLeadingWhitespace))
 	ulua.L.SetField(pkg, "IsWordChar", luar.New(ulua.L, util.LuaIsWordChar))
+	ulua.L.SetField(pkg, "String", luar.New(ulua.L, util.String))
+	ulua.L.SetField(pkg, "RuneStr", luar.New(ulua.L, func(r rune) string {
+		return string(r)
+	}))
 
 	return pkg
 }

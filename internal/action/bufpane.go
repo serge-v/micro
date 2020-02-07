@@ -91,7 +91,14 @@ func BufMapKey(k Event, action string) {
 				screen.TermMessage("Lua Error:", a, "does not exist")
 				continue
 			}
-			names = append(names, "")
+			split := strings.SplitN(a, ".", 2)
+			if len(split) > 1 {
+				a = strings.Title(split[0]) + strings.Title(split[1])
+			} else {
+				a = strings.Title(a)
+			}
+
+			names = append(names, a)
 		} else if f, ok := BufKeyActions[a]; ok {
 			afn = f
 			names = append(names, a)
@@ -175,15 +182,17 @@ type BufPane struct {
 	multiWord bool
 
 	splitID uint64
+	tab     *Tab
 
 	// remember original location of a search in case the search is canceled
 	searchOrig buffer.Loc
 }
 
-func NewBufPane(buf *buffer.Buffer, win display.BWindow) *BufPane {
+func NewBufPane(buf *buffer.Buffer, win display.BWindow, tab *Tab) *BufPane {
 	h := new(BufPane)
 	h.Buf = buf
 	h.BWindow = win
+	h.tab = tab
 
 	h.Cursor = h.Buf.GetActiveCursor()
 	h.mouseReleased = true
@@ -193,9 +202,23 @@ func NewBufPane(buf *buffer.Buffer, win display.BWindow) *BufPane {
 	return h
 }
 
-func NewBufPaneFromBuf(buf *buffer.Buffer) *BufPane {
+func NewBufPaneFromBuf(buf *buffer.Buffer, tab *Tab) *BufPane {
 	w := display.NewBufWindow(0, 0, 0, 0, buf)
-	return NewBufPane(buf, w)
+	return NewBufPane(buf, w, tab)
+}
+
+func (h *BufPane) SetTab(t *Tab) {
+	h.tab = t
+}
+
+func (h *BufPane) Tab() *Tab {
+	return h.tab
+}
+
+func (h *BufPane) ResizePane(size int) {
+	n := h.tab.GetNode(h.splitID)
+	n.ResizeSplit(size)
+	h.tab.Resize()
 }
 
 // PluginCB calls all plugin callbacks with a certain name and
@@ -433,21 +456,28 @@ func (h *BufPane) DoRuneInsert(r rune) {
 	}
 }
 
-func (h *BufPane) VSplitBuf(buf *buffer.Buffer) *BufPane {
-	e := NewBufPaneFromBuf(buf)
-	e.splitID = MainTab().GetNode(h.splitID).VSplit(h.Buf.Settings["splitright"].(bool))
+func (h *BufPane) VSplitIndex(buf *buffer.Buffer, right bool) *BufPane {
+	e := NewBufPaneFromBuf(buf, h.tab)
+	e.splitID = MainTab().GetNode(h.splitID).VSplit(right)
 	MainTab().Panes = append(MainTab().Panes, e)
 	MainTab().Resize()
 	MainTab().SetActive(len(MainTab().Panes) - 1)
 	return e
 }
-func (h *BufPane) HSplitBuf(buf *buffer.Buffer) *BufPane {
-	e := NewBufPaneFromBuf(buf)
-	e.splitID = MainTab().GetNode(h.splitID).HSplit(h.Buf.Settings["splitbottom"].(bool))
+func (h *BufPane) HSplitIndex(buf *buffer.Buffer, bottom bool) *BufPane {
+	e := NewBufPaneFromBuf(buf, h.tab)
+	e.splitID = MainTab().GetNode(h.splitID).HSplit(bottom)
 	MainTab().Panes = append(MainTab().Panes, e)
 	MainTab().Resize()
 	MainTab().SetActive(len(MainTab().Panes) - 1)
 	return e
+}
+
+func (h *BufPane) VSplitBuf(buf *buffer.Buffer) *BufPane {
+	return h.VSplitIndex(buf, h.Buf.Settings["splitright"].(bool))
+}
+func (h *BufPane) HSplitBuf(buf *buffer.Buffer) *BufPane {
+	return h.HSplitIndex(buf, h.Buf.Settings["splitbottom"].(bool))
 }
 func (h *BufPane) Close() {
 	h.Buf.Close()
@@ -497,6 +527,7 @@ var BufKeyActions = map[string]BufKeyAction{
 	"DeleteWordLeft":         (*BufPane).DeleteWordLeft,
 	"SelectLine":             (*BufPane).SelectLine,
 	"SelectToStartOfLine":    (*BufPane).SelectToStartOfLine,
+	"SelectToStartOfText":    (*BufPane).SelectToStartOfText,
 	"SelectToEndOfLine":      (*BufPane).SelectToEndOfLine,
 	"ParagraphPrevious":      (*BufPane).ParagraphPrevious,
 	"ParagraphNext":          (*BufPane).ParagraphNext,
@@ -537,6 +568,7 @@ var BufKeyActions = map[string]BufKeyAction{
 	"SelectPageDown":         (*BufPane).SelectPageDown,
 	"HalfPageUp":             (*BufPane).HalfPageUp,
 	"HalfPageDown":           (*BufPane).HalfPageDown,
+	"StartOfText":            (*BufPane).StartOfText,
 	"StartOfLine":            (*BufPane).StartOfLine,
 	"EndOfLine":              (*BufPane).EndOfLine,
 	"ToggleHelp":             (*BufPane).ToggleHelp,
@@ -607,6 +639,7 @@ var MultiActions = map[string]bool{
 	"DeleteWordLeft":      true,
 	"SelectLine":          true,
 	"SelectToStartOfLine": true,
+	"SelectToStartOfText": true,
 	"SelectToEndOfLine":   true,
 	"ParagraphPrevious":   true,
 	"ParagraphNext":       true,
@@ -630,6 +663,7 @@ var MultiActions = map[string]bool{
 	"SelectPageUp":        true,
 	"SelectPageDown":      true,
 	"StartOfLine":         true,
+	"StartOfText":         true,
 	"EndOfLine":           true,
 	"JumpToMatchingBrace": true,
 }

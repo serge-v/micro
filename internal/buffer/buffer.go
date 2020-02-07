@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -28,8 +29,11 @@ import (
 const backupTime = 8000
 
 var (
+	// OpenBuffers is a list of the currently open buffers
 	OpenBuffers []*Buffer
-	LogBuf      *Buffer
+	// LogBuf is a reference to the log buffer which can be opened with the
+	// `> log` command
+	LogBuf *Buffer
 )
 
 // The BufType defines what kind of buffer this is
@@ -41,16 +45,26 @@ type BufType struct {
 }
 
 var (
+	// BTDefault is a default buffer
 	BTDefault = BufType{0, false, false, true}
-	BTHelp    = BufType{1, true, true, true}
-	BTLog     = BufType{2, true, true, false}
+	// BTHelp is a help buffer
+	BTHelp = BufType{1, true, true, true}
+	// BTLog is a log buffer
+	BTLog = BufType{2, true, true, false}
+	// BTScratch is a buffer that cannot be saved (for scratch work)
 	BTScratch = BufType{3, false, true, false}
-	BTRaw     = BufType{4, false, true, false}
-	BTInfo    = BufType{5, false, true, false}
+	// BTRaw is is a buffer that shows raw terminal events
+	BTRaw = BufType{4, false, true, false}
+	// BTInfo is a buffer for inputting information
+	BTInfo = BufType{5, false, true, false}
 
+	// ErrFileTooLarge is returned when the file is too large to hash
+	// (fastdirty is automatically enabled)
 	ErrFileTooLarge = errors.New("File is too large to hash")
 )
 
+// SharedBuffer is a struct containing info that is shared among buffers
+// that have the same file open
 type SharedBuffer struct {
 	*LineArray
 	// Stores the last modification time of the file the buffer is pointing to
@@ -62,16 +76,24 @@ type SharedBuffer struct {
 	// Whether or not suggestions can be autocompleted must be shared because
 	// it changes based on how the buffer has changed
 	HasSuggestions bool
+
+	// Modifications is the list of modified regions for syntax highlighting
+	Modifications []Loc
 }
 
 func (b *SharedBuffer) insert(pos Loc, value []byte) {
 	b.isModified = true
 	b.HasSuggestions = false
 	b.LineArray.insert(pos, value)
+
+	// b.Modifications is cleared every screen redraw so it's
+	// ok to append duplicates
+	b.Modifications = append(b.Modifications, Loc{pos.Y, pos.Y + bytes.Count(value, []byte{'\n'})})
 }
 func (b *SharedBuffer) remove(start, end Loc) []byte {
 	b.isModified = true
 	b.HasSuggestions = false
+	b.Modifications = append(b.Modifications, Loc{start.Y, start.Y})
 	return b.LineArray.remove(start, end)
 }
 
@@ -97,8 +119,12 @@ type Buffer struct {
 	// Name of the buffer on the status line
 	name string
 
-	SyntaxDef   *highlight.Def
-	Highlighter *highlight.Highlighter
+	// SyntaxDef represents the syntax highlighting definition being used
+	// This stores the highlighting rules and filetype detection info
+	SyntaxDef *highlight.Def
+	// The Highlighter struct actually performs the highlighting
+	Highlighter   *highlight.Highlighter
+	HighlightLock sync.Mutex
 
 	// Hash of the original buffer -- empty if fastdirty is on
 	origHash [md5.Size]byte
@@ -211,7 +237,7 @@ func NewBuffer(r io.Reader, size int64, path string, startcursor Loc, btype BufT
 		b.EventHandler = NewEventHandler(b.SharedBuffer, b.cursors)
 	}
 
-	if b.Settings["readonly"].(bool) {
+	if b.Settings["readonly"].(bool) && b.Type == BTDefault {
 		b.Type.Readonly = true
 	}
 
@@ -260,6 +286,8 @@ func NewBuffer(r io.Reader, size int64, path string, startcursor Loc, btype BufT
 		screen.TermMessage(err)
 	}
 
+	b.Modifications = make([]Loc, 0, 10)
+
 	OpenBuffers = append(OpenBuffers, b)
 
 	return b
@@ -304,6 +332,7 @@ func (b *Buffer) SetName(s string) {
 	b.name = s
 }
 
+// Insert inserts the given string of text at the start location
 func (b *Buffer) Insert(start Loc, text string) {
 	if !b.Type.Readonly {
 		b.EventHandler.cursors = b.cursors
@@ -314,6 +343,7 @@ func (b *Buffer) Insert(start Loc, text string) {
 	}
 }
 
+// Remove removes the characters between the start and end locations
 func (b *Buffer) Remove(start, end Loc) {
 	if !b.Type.Readonly {
 		b.EventHandler.cursors = b.cursors
@@ -322,6 +352,16 @@ func (b *Buffer) Remove(start, end Loc) {
 
 		go b.Backup(true)
 	}
+}
+
+// ClearModifications clears the list of modified lines in this buffer
+// The list of modified lines is used for syntax highlighting so that
+// we can selectively highlight only the necessary lines
+// This function should be called every time this buffer is drawn to
+// the screen
+func (b *Buffer) ClearModifications() {
+	// clear slice without resetting the cap
+	b.Modifications = b.Modifications[:0]
 }
 
 // FileType returns the buffer's filetype
@@ -372,6 +412,7 @@ func (b *Buffer) ReOpen() error {
 	return err
 }
 
+// RelocateCursors relocates all cursors (makes sure they are in the buffer)
 func (b *Buffer) RelocateCursors() {
 	for _, c := range b.cursors {
 		c.Relocate()
@@ -573,10 +614,19 @@ func (b *Buffer) UpdateRules() {
 	if b.Highlighter == nil || syntaxFile != "" {
 		if b.SyntaxDef != nil {
 			b.Settings["filetype"] = b.SyntaxDef.FileType
-			b.Highlighter = highlight.NewHighlighter(b.SyntaxDef)
-			if b.Settings["syntax"].(bool) {
+		}
+	} else {
+		b.SyntaxDef = &highlight.EmptyDef
+	}
+
+	if b.SyntaxDef != nil {
+		b.Highlighter = highlight.NewHighlighter(b.SyntaxDef)
+		if b.Settings["syntax"].(bool) {
+			go func() {
 				b.Highlighter.HighlightStates(b)
-			}
+				b.Highlighter.HighlightMatches(b, 0, b.End().Y)
+				screen.DrawChan <- true
+			}()
 		}
 	}
 }
@@ -857,12 +907,12 @@ func ParseCursorLocation(cursorPositions []string) (Loc, error) {
 	}
 
 	startpos.Y, err = strconv.Atoi(cursorPositions[0])
-	startpos.Y -= 1
+	startpos.Y--
 	if err == nil {
 		if len(cursorPositions) > 1 {
 			startpos.X, err = strconv.Atoi(cursorPositions[1])
 			if startpos.X > 0 {
-				startpos.X -= 1
+				startpos.X--
 			}
 		}
 	}
@@ -875,7 +925,17 @@ func (b *Buffer) Line(i int) string {
 	return string(b.LineBytes(i))
 }
 
+func (b *Buffer) Write(bytes []byte) (n int, err error) {
+	b.EventHandler.InsertBytes(b.End(), bytes)
+	return len(bytes), nil
+}
+
 // WriteLog writes a string to the log buffer
 func WriteLog(s string) {
 	LogBuf.EventHandler.Insert(LogBuf.End(), s)
+}
+
+// GetLogBuf returns the log buffer
+func GetLogBuf() *Buffer {
+	return LogBuf
 }

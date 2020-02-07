@@ -1,7 +1,6 @@
 package action
 
 import (
-	"log"
 	"regexp"
 	"runtime"
 	"strings"
@@ -284,15 +283,18 @@ func (h *BufPane) SelectWordLeft() bool {
 	return true
 }
 
+// StartOfLine moves the cursor to the start of the text of the line
+func (h *BufPane) StartOfText() bool {
+	h.Cursor.Deselect(true)
+	h.Cursor.StartOfText()
+	h.Relocate()
+	return true
+}
+
 // StartOfLine moves the cursor to the start of the line
 func (h *BufPane) StartOfLine() bool {
 	h.Cursor.Deselect(true)
-	h.Cursor.StartOfText()
-	// if h.Cursor.X != 0 {
-	// 	h.Cursor.Start()
-	// } else {
-	// 	h.Cursor.StartOfText()
-	// }
+	h.Cursor.Start()
 	h.Relocate()
 	return true
 }
@@ -308,6 +310,17 @@ func (h *BufPane) EndOfLine() bool {
 // SelectLine selects the entire current line
 func (h *BufPane) SelectLine() bool {
 	h.Cursor.SelectLine()
+	h.Relocate()
+	return true
+}
+
+// SelectToStartOfText selects to the start of the text on the current line
+func (h *BufPane) SelectToStartOfText() bool {
+	if !h.Cursor.HasSelection() {
+		h.Cursor.OrigSelection[0] = h.Cursor.Loc
+	}
+	h.Cursor.StartOfText()
+	h.Cursor.SelectTo(h.Cursor.Loc)
 	h.Relocate()
 	return true
 }
@@ -535,12 +548,14 @@ func (h *BufPane) IndentSelection() bool {
 		tabsize := int(h.Buf.Settings["tabsize"].(float64))
 		indentsize := len(h.Buf.IndentString(tabsize))
 		for y := startY; y <= endY; y++ {
-			h.Buf.Insert(buffer.Loc{X: 0, Y: y}, h.Buf.IndentString(tabsize))
-			if y == startY && start.X > 0 {
-				h.Cursor.SetSelectionStart(start.Move(indentsize, h.Buf))
-			}
-			if y == endY {
-				h.Cursor.SetSelectionEnd(buffer.Loc{X: endX + indentsize + 1, Y: endY})
+			if len(h.Buf.LineBytes(y)) > 0 {
+				h.Buf.Insert(buffer.Loc{X: 0, Y: y}, h.Buf.IndentString(tabsize))
+				if y == startY && start.X > 0 {
+					h.Cursor.SetSelectionStart(start.Move(indentsize, h.Buf))
+				}
+				if y == endY {
+					h.Cursor.SetSelectionEnd(buffer.Loc{X: endX + indentsize + 1, Y: endY})
+				}
 			}
 		}
 		h.Buf.RelocateCursors()
@@ -617,11 +632,9 @@ func (h *BufPane) CycleAutocompleteBack() bool {
 	if h.Cursor.HasSelection() {
 		return false
 	}
-	log.Println(h.Buf.HasSuggestions)
 
 	if h.Buf.HasSuggestions {
 		h.Buf.CycleAutocomplete(false)
-		log.Println("TRUE")
 		return true
 	}
 	return false

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -45,7 +46,7 @@ var optionValidators = map[string]optionValidator{
 }
 
 func ReadSettings() error {
-	filename := ConfigDir + "/settings.json"
+	filename := filepath.Join(ConfigDir, "settings.json")
 	if _, e := os.Stat(filename); e == nil {
 		input, err := ioutil.ReadFile(filename)
 		if err != nil {
@@ -119,12 +120,22 @@ func WriteSettings(filename string) error {
 	return err
 }
 
-// RegisterCommonOption creates a new option. This is meant to be called by plugins to add options.
-func RegisterCommonOption(name string, defaultvalue interface{}) error {
+func OverwriteSettings(filename string) error {
+	var err error
+	if _, e := os.Stat(ConfigDir); e == nil {
+		txt, _ := json.MarshalIndent(GlobalSettings, "", "    ")
+		err = ioutil.WriteFile(filename, append(txt, '\n'), 0644)
+	}
+	return err
+}
+
+// RegisterCommonOptionPlug creates a new option (called pl.name). This is meant to be called by plugins to add options.
+func RegisterCommonOptionPlug(pl string, name string, defaultvalue interface{}) error {
+	name = pl + "." + name
 	if v, ok := GlobalSettings[name]; !ok {
 		defaultCommonSettings[name] = defaultvalue
 		GlobalSettings[name] = defaultvalue
-		err := WriteSettings(ConfigDir + "/settings.json")
+		err := WriteSettings(filepath.Join(ConfigDir, "/settings.json"))
 		if err != nil {
 			return errors.New("Error writing settings.json file: " + err.Error())
 		}
@@ -134,11 +145,17 @@ func RegisterCommonOption(name string, defaultvalue interface{}) error {
 	return nil
 }
 
+// RegisterGlobalOptionPlug creates a new global-only option (named pl.name)
+func RegisterGlobalOptionPlug(pl string, name string, defaultvalue interface{}) error {
+	return RegisterGlobalOption(pl+"."+name, defaultvalue)
+}
+
+// RegisterGlobalOption creates a new global-only option
 func RegisterGlobalOption(name string, defaultvalue interface{}) error {
 	if v, ok := GlobalSettings[name]; !ok {
 		defaultGlobalSettings[name] = defaultvalue
 		GlobalSettings[name] = defaultvalue
-		err := WriteSettings(ConfigDir + "/settings.json")
+		err := WriteSettings(filepath.Join(ConfigDir, "settings.json"))
 		if err != nil {
 			return errors.New("Error writing settings.json file: " + err.Error())
 		}
@@ -212,15 +229,25 @@ func DefaultCommonSettings() map[string]interface{} {
 	return commonsettings
 }
 
+// a list of settings that should only be globally modified and their
+// default values
 var defaultGlobalSettings = map[string]interface{}{
 	// "autosave":    float64(0),
-	"colorscheme": "default",
-	"infobar":     true,
-	"keymenu":     false,
-	"mouse":       true,
-	"paste":       false,
-	"savehistory": true,
-	"sucmd":       "sudo",
+	"colorscheme":    "default",
+	"infobar":        true,
+	"keymenu":        false,
+	"mouse":          true,
+	"paste":          false,
+	"savehistory":    true,
+	"sucmd":          "sudo",
+	"pluginchannels": []string{"https://raw.githubusercontent.com/micro-editor/plugin-channel/master/channel.json"},
+	"pluginrepos":    []string{},
+}
+
+// a list of settings that should never be globally modified
+var LocalSettings = []string{
+	"filetype",
+	"readonly",
 }
 
 // DefaultGlobalSettings returns the default global settings for micro
@@ -249,6 +276,7 @@ func DefaultAllSettings() map[string]interface{} {
 	return allsettings
 }
 
+// GetNativeValue parses and validates a value for a given option
 func GetNativeValue(option string, realValue interface{}, value string) (interface{}, error) {
 	var native interface{}
 	kind := reflect.TypeOf(realValue).Kind()

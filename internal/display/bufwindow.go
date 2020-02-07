@@ -358,6 +358,10 @@ func (w *BufWindow) showCursor(x, y int, main bool) {
 func (w *BufWindow) displayBuffer() {
 	b := w.Buf
 
+	if w.Height <= 0 || w.Width <= 0 {
+		return
+	}
+
 	hasMessage := len(b.Messages) > 0
 	bufHeight := w.Height
 	if w.drawStatus {
@@ -370,17 +374,14 @@ func (w *BufWindow) displayBuffer() {
 	}
 
 	if b.Settings["syntax"].(bool) && b.SyntaxDef != nil {
-		for _, c := range b.GetCursors() {
-			// rehighlight starting from where the cursor is
-			start := c.Y
-			if start > 0 && b.Rehighlight(start-1) {
-				b.Highlighter.ReHighlightLine(b, start-1)
-				b.SetRehighlight(start-1, false)
+		for _, r := range b.Modifications {
+			final := -1
+			for i := r.X; i <= r.Y; i++ {
+				final = util.Max(b.Highlighter.ReHighlightStates(b, i), final)
 			}
-
-			b.Highlighter.ReHighlightStates(b, start)
-			b.Highlighter.HighlightMatches(b, w.StartLine, w.StartLine+bufHeight)
+			b.Highlighter.HighlightMatches(b, r.X, final+1)
 		}
+		b.ClearModifications()
 	}
 
 	var matchingBraces []buffer.Loc
@@ -415,7 +416,11 @@ func (w *BufWindow) displayBuffer() {
 	}
 	curNumStyle := config.DefStyle
 	if style, ok := config.Colorscheme["current-line-number"]; ok {
-		curNumStyle = style
+		if !b.Settings["cursorline"].(bool) {
+			curNumStyle = lineNumStyle
+		} else {
+			curNumStyle = style
+		}
 	}
 
 	// We need to know the string length of the largest line number

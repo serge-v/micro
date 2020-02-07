@@ -5,6 +5,10 @@ import (
 	"unicode/utf8"
 
 	dmp "github.com/sergi/go-diff/diffmatchpatch"
+	"github.com/zyedidia/micro/internal/config"
+	ulua "github.com/zyedidia/micro/internal/lua"
+	"github.com/zyedidia/micro/internal/screen"
+	luar "layeh.com/gopher-luar"
 )
 
 const (
@@ -17,7 +21,7 @@ const (
 	// TextEventReplace represents a replace event
 	TextEventReplace = 0
 
-	undoThreshold = 500 // If two events are less than n milliseconds apart, undo both of them
+	undoThreshold = 1000 // If two events are less than n milliseconds apart, undo both of them
 )
 
 // TextEvent holds data for a manipulation on some text that can be undone
@@ -107,6 +111,11 @@ func (eh *EventHandler) ApplyDiff(new string) {
 // Insert creates an insert text event and executes it
 func (eh *EventHandler) Insert(start Loc, textStr string) {
 	text := []byte(textStr)
+	eh.InsertBytes(start, text)
+}
+
+// InsertBytes creates an insert text event and executes it
+func (eh *EventHandler) InsertBytes(start Loc, text []byte) {
 	e := &TextEvent{
 		C:         *eh.cursors[eh.active],
 		EventType: TextEventInsert,
@@ -187,16 +196,14 @@ func (eh *EventHandler) Execute(t *TextEvent) {
 	}
 	eh.UndoStack.Push(t)
 
-	// TODO: Call plugins on text events
-	// for pl := range loadedPlugins {
-	// 	ret, err := Call(pl+".onBeforeTextEvent", t)
-	// 	if err != nil && !strings.HasPrefix(err.Error(), "function does not exist") {
-	// 		screen.TermMessage(err)
-	// 	}
-	// 	if val, ok := ret.(lua.LBool); ok && val == lua.LFalse {
-	// 		return
-	// 	}
-	// }
+	b, err := config.RunPluginFnBool("onBeforeTextEvent", luar.New(ulua.L, eh.buf), luar.New(ulua.L, t))
+	if err != nil {
+		screen.TermMessage(err)
+	}
+
+	if !b {
+		return
+	}
 
 	ExecuteTextEvent(t, eh.buf)
 }
@@ -209,8 +216,7 @@ func (eh *EventHandler) Undo() {
 	}
 
 	startTime := t.Time.UnixNano() / int64(time.Millisecond)
-
-	eh.UndoOneEvent()
+	endTime := startTime - (startTime % undoThreshold)
 
 	for {
 		t = eh.UndoStack.Peek()
@@ -218,10 +224,9 @@ func (eh *EventHandler) Undo() {
 			return
 		}
 
-		if startTime-(t.Time.UnixNano()/int64(time.Millisecond)) > undoThreshold {
+		if t.Time.UnixNano()/int64(time.Millisecond) < endTime {
 			return
 		}
-		startTime = t.Time.UnixNano() / int64(time.Millisecond)
 
 		eh.UndoOneEvent()
 	}
@@ -261,8 +266,7 @@ func (eh *EventHandler) Redo() {
 	}
 
 	startTime := t.Time.UnixNano() / int64(time.Millisecond)
-
-	eh.RedoOneEvent()
+	endTime := startTime - (startTime % undoThreshold) + undoThreshold
 
 	for {
 		t = eh.RedoStack.Peek()
@@ -270,7 +274,7 @@ func (eh *EventHandler) Redo() {
 			return
 		}
 
-		if (t.Time.UnixNano()/int64(time.Millisecond))-startTime > undoThreshold {
+		if t.Time.UnixNano()/int64(time.Millisecond) > endTime {
 			return
 		}
 

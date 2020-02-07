@@ -17,10 +17,13 @@ const (
 	RTHelp         = 2
 	RTPlugin       = 3
 	RTSyntaxHeader = 4
-	NumTypes       = 5 // How many filetypes are there
 )
 
-type RTFiletype byte
+var (
+	NumTypes = 5 // How many filetypes are there
+)
+
+type RTFiletype int
 
 // RuntimeFile allows the program to read runtime data like colorschemes or syntax files
 type RuntimeFile interface {
@@ -31,8 +34,20 @@ type RuntimeFile interface {
 }
 
 // allFiles contains all available files, mapped by filetype
-var allFiles [NumTypes][]RuntimeFile
-var realFiles [NumTypes][]RuntimeFile
+var allFiles [][]RuntimeFile
+var realFiles [][]RuntimeFile
+
+func init() {
+	allFiles = make([][]RuntimeFile, NumTypes)
+	realFiles = make([][]RuntimeFile, NumTypes)
+}
+
+func NewRTFiletype() int {
+	NumTypes++
+	allFiles = append(allFiles, []RuntimeFile{})
+	realFiles = append(realFiles, []RuntimeFile{})
+	return NumTypes - 1
+}
 
 // some file on filesystem
 type realFile string
@@ -176,18 +191,22 @@ func InitRuntimeFiles() {
 			for _, f := range srcs {
 				if strings.HasSuffix(f.Name(), ".lua") {
 					p.Srcs = append(p.Srcs, realFile(filepath.Join(plugdir, d.Name(), f.Name())))
-				} else if f.Name() == "info.json" {
-					data, err := ioutil.ReadFile(filepath.Join(plugdir, d.Name(), "info.json"))
+				} else if strings.HasSuffix(f.Name(), ".json") {
+					data, err := ioutil.ReadFile(filepath.Join(plugdir, d.Name(), f.Name()))
 					if err != nil {
 						continue
 					}
-					p.Info, _ = NewPluginInfo(data)
+					p.Info, err = NewPluginInfo(data)
+					if err != nil {
+						log.Println(err)
+						continue
+					}
 					p.Name = p.Info.Name
 				}
 			}
 
-			if !isID(p.Name) {
-				log.Println("Invalid plugin name", p.Name)
+			if !isID(p.Name) || len(p.Srcs) <= 0 {
+				log.Println(p.Name, "is not a plugin")
 				continue
 			}
 			Plugins = append(Plugins, p)
@@ -205,17 +224,21 @@ func InitRuntimeFiles() {
 				for _, f := range srcs {
 					if strings.HasSuffix(f, ".lua") {
 						p.Srcs = append(p.Srcs, assetFile(filepath.Join(plugdir, d, f)))
-					} else if f == "info.json" {
-						data, err := Asset(filepath.Join(plugdir, d, "info.json"))
+					} else if strings.HasSuffix(f, ".json") {
+						data, err := Asset(filepath.Join(plugdir, d, f))
 						if err != nil {
 							continue
 						}
-						p.Info, _ = NewPluginInfo(data)
+						p.Info, err = NewPluginInfo(data)
+						if err != nil {
+							log.Println(err)
+							continue
+						}
 						p.Name = p.Info.Name
 					}
 				}
-				if !isID(p.Name) {
-					log.Println("Invalid plugin name", p.Name)
+				if !isID(p.Name) || len(p.Srcs) <= 0 {
+					log.Println(p.Name, "is not a plugin")
 					continue
 				}
 				Plugins = append(Plugins, p)

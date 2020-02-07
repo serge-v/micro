@@ -275,7 +275,6 @@ func MakeRelative(path, base string) (string, error) {
 	return path, nil
 }
 
-// TODO: consider changing because of snap segfault
 // ReplaceHome takes a path as input and replaces ~ at the start of the path with the user's
 // home directory. Does nothing if the path does not start with '~'.
 func ReplaceHome(path string) (string, error) {
@@ -417,4 +416,8 @@ func IsNonAlphaNumeric(c rune) bool {
 
 func ParseSpecial(s string) string {
 	return strings.Replace(s, "\\t", "\t", -1)
+}
+
+func String(s []byte) string {
+	return string(s)
 }
