@@ -35,7 +35,7 @@ func init() {
 
 // Options with validators
 var optionValidators = map[string]optionValidator{
-	// "autosave":     validateNonNegativeValue,
+	"autosave":     validateNonNegativeValue,
 	"tabsize":      validatePositiveValue,
 	"scrollmargin": validateNonNegativeValue,
 	"scrollspeed":  validateNonNegativeValue,
@@ -57,6 +57,18 @@ func ReadSettings() error {
 			err = json5.Unmarshal(input, &parsedSettings)
 			if err != nil {
 				return errors.New("Error reading settings.json: " + err.Error())
+			}
+
+			// check if autosave is a boolean and convert it to float if so
+			if v, ok := parsedSettings["autosave"]; ok {
+				s, ok := v.(bool)
+				if ok {
+					if s {
+						parsedSettings["autosave"] = 8.0
+					} else {
+						parsedSettings["autosave"] = 0.0
+					}
+				}
 			}
 		}
 	}
@@ -176,6 +188,7 @@ var defaultCommonSettings = map[string]interface{}{
 	"basename":       false,
 	"colorcolumn":    float64(0),
 	"cursorline":     true,
+	"diffgutter":     false,
 	"encoding":       "utf-8",
 	"eofnewline":     false,
 	"fastdirty":      true,
@@ -198,7 +211,7 @@ var defaultCommonSettings = map[string]interface{}{
 	"softwrap":       false,
 	"splitbottom":    true,
 	"splitright":     true,
-	"statusformatl":  "$(filename) $(modified)($(line),$(col)) | ft:$(opt:filetype) | $(opt:fileformat) | $(opt:encoding)",
+	"statusformatl":  "$(filename) $(modified)($(line),$(col)) $(status.paste)| ft:$(opt:filetype) | $(opt:fileformat) | $(opt:encoding)",
 	"statusformatr":  "$(bind:ToggleKeyMenu): bindings, $(bind:ToggleHelp): help",
 	"statusline":     true,
 	"syntax":         true,
@@ -232,7 +245,7 @@ func DefaultCommonSettings() map[string]interface{} {
 // a list of settings that should only be globally modified and their
 // default values
 var defaultGlobalSettings = map[string]interface{}{
-	// "autosave":    float64(0),
+	"autosave":       float64(0),
 	"colorscheme":    "default",
 	"infobar":        true,
 	"keymenu":        false,

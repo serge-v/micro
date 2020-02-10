@@ -91,14 +91,17 @@ func CleanConfig() {
 		var buffer buffer.SerializedBuffer
 		for _, f := range files {
 			fname := filepath.Join(config.ConfigDir, "buffers", f.Name())
-			file, err := os.Open(fname)
-			defer file.Close()
+			file, e := os.Open(fname)
 
-			decoder := gob.NewDecoder(file)
-			err = decoder.Decode(&buffer)
+			if e == nil {
+				defer file.Close()
 
-			if err != nil && f.Name() != "history" {
-				badFiles = append(badFiles, fname)
+				decoder := gob.NewDecoder(file)
+				err = decoder.Decode(&buffer)
+
+				if err != nil && f.Name() != "history" {
+					badFiles = append(badFiles, fname)
+				}
 			}
 		}
 

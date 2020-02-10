@@ -620,6 +620,11 @@ func (h *BufPane) Autocomplete() bool {
 		return false
 	}
 
+	if !util.IsNonAlphaNumeric(h.Cursor.RuneUnder(h.Cursor.X)) {
+		// don't autocomplete if cursor is on alpha numeric character (middle of a word)
+		return false
+	}
+
 	if b.HasSuggestions {
 		b.CycleAutocomplete(true)
 		return true
@@ -659,23 +664,27 @@ func (h *BufPane) SaveAll() bool {
 	return true
 }
 
-// Save the buffer to disk
-func (h *BufPane) Save() bool {
+// SaveCB performs a save and does a callback at the very end (after all prompts have been resolved)
+func (h *BufPane) SaveCB(action string, callback func()) bool {
 	// If this is an empty buffer, ask for a filename
 	if h.Buf.Path == "" {
-		h.SaveAs()
+		h.SaveAsCB(action, callback)
 	} else {
-		noPrompt := h.saveBufToFile(h.Buf.Path, "Save")
+		noPrompt := h.saveBufToFile(h.Buf.Path, action, callback)
 		if noPrompt {
 			return true
 		}
 	}
-
 	return false
 }
 
-// SaveAs saves the buffer to disk with the given name
-func (h *BufPane) SaveAs() bool {
+// Save the buffer to disk
+func (h *BufPane) Save() bool {
+	return h.SaveCB("Save", nil)
+}
+
+// SaveAsCB performs a save as and does a callback at the very end (after all prompts have been resolved)
+func (h *BufPane) SaveAsCB(action string, callback func()) bool {
 	InfoBar.Prompt("Filename: ", "", "Save", nil, func(resp string, canceled bool) {
 		if !canceled {
 			// the filename might or might not be quoted, so unquote first then join the strings.
@@ -689,18 +698,23 @@ func (h *BufPane) SaveAs() bool {
 				return
 			}
 			filename := strings.Join(args, " ")
-			noPrompt := h.saveBufToFile(filename, "SaveAs")
+			noPrompt := h.saveBufToFile(filename, action, callback)
 			if noPrompt {
-				h.completeAction("SaveAs")
+				h.completeAction(action)
 			}
 		}
 	})
 	return false
 }
 
+// SaveAs saves the buffer to disk with the given name
+func (h *BufPane) SaveAs() bool {
+	return h.SaveAsCB("SaveAs", nil)
+}
+
 // This function saves the buffer to `filename` and changes the buffer's path and name
 // to `filename` if the save is successful
-func (h *BufPane) saveBufToFile(filename string, action string) bool {
+func (h *BufPane) saveBufToFile(filename string, action string, callback func()) bool {
 	err := h.Buf.SaveAs(filename)
 	if err != nil {
 		if strings.HasSuffix(err.Error(), "permission denied") {
@@ -716,6 +730,9 @@ func (h *BufPane) saveBufToFile(filename string, action string) bool {
 					}
 					h.completeAction(action)
 				}
+				if callback != nil {
+					callback()
+				}
 			})
 			return false
 		} else {
@@ -725,6 +742,9 @@ func (h *BufPane) saveBufToFile(filename string, action string) bool {
 		h.Buf.Path = filename
 		h.Buf.SetName(filename)
 		InfoBar.Message("Saved " + filename)
+	}
+	if callback != nil {
+		callback()
 	}
 	return true
 }
@@ -1195,6 +1215,21 @@ func (h *BufPane) HalfPageDown() bool {
 	return true
 }
 
+// ToggleDiffGutter turns the diff gutter off and on
+func (h *BufPane) ToggleDiffGutter() bool {
+	if !h.Buf.Settings["diffgutter"].(bool) {
+		h.Buf.Settings["diffgutter"] = true
+		h.Buf.UpdateDiff(func(synchronous bool) {
+			screen.DrawChan <- true
+		})
+		InfoBar.Message("Enabled diff gutter")
+	} else {
+		h.Buf.Settings["diffgutter"] = false
+		InfoBar.Message("Disabled diff gutter")
+	}
+	return true
+}
+
 // ToggleRuler turns line numbers off and on
 func (h *BufPane) ToggleRuler() bool {
 	if !h.Buf.Settings["ruler"].(bool) {
@@ -1278,20 +1313,22 @@ func (h *BufPane) Quit() bool {
 		}
 	}
 	if h.Buf.Modified() {
-		// if config.GlobalSettings["autosave"].(float64) > 0 {
-		// autosave on means we automatically save when quitting
-		// h.Save()
-		// quit()
-		// } else {
-		InfoBar.YNPrompt("Save changes to "+h.Buf.GetName()+" before closing? (y,n,esc)", func(yes, canceled bool) {
-			if !canceled && !yes {
+		if config.GlobalSettings["autosave"].(float64) > 0 {
+			// autosave on means we automatically save when quitting
+			h.SaveCB("Quit", func() {
 				quit()
-			} else if !canceled && yes {
-				h.Save()
-				quit()
-			}
-		})
-		// }
+			})
+		} else {
+			InfoBar.YNPrompt("Save changes to "+h.Buf.GetName()+" before closing? (y,n,esc)", func(yes, canceled bool) {
+				if !canceled && !yes {
+					quit()
+				} else if !canceled && yes {
+					h.SaveCB("Quit", func() {
+						quit()
+					})
+				}
+			})
+		}
 	} else {
 		quit()
 	}
@@ -1373,38 +1410,42 @@ func (h *BufPane) HSplitAction() bool {
 
 // Unsplit closes all splits in the current tab except the active one
 func (h *BufPane) Unsplit() bool {
-	n := MainTab().GetNode(h.splitID)
-	n.Unsplit()
+	tab := h.tab
+	n := tab.GetNode(h.splitID)
+	ok := n.Unsplit()
+	if ok {
+		tab.RemovePane(tab.GetPane(h.splitID))
+		tab.Resize()
+		tab.SetActive(len(tab.Panes) - 1)
 
-	MainTab().RemovePane(MainTab().GetPane(h.splitID))
-	MainTab().Resize()
-	MainTab().SetActive(len(MainTab().Panes) - 1)
-	return true
+		return true
+	}
+	return false
 }
 
 // NextSplit changes the view to the next split
 func (h *BufPane) NextSplit() bool {
-	a := MainTab().active
-	if a < len(MainTab().Panes)-1 {
+	a := h.tab.active
+	if a < len(h.tab.Panes)-1 {
 		a++
 	} else {
 		a = 0
 	}
 
-	MainTab().SetActive(a)
+	h.tab.SetActive(a)
 
 	return true
 }
 
 // PreviousSplit changes the view to the previous split
 func (h *BufPane) PreviousSplit() bool {
-	a := MainTab().active
+	a := h.tab.active
 	if a > 0 {
 		a--
 	} else {
-		a = len(MainTab().Panes) - 1
+		a = len(h.tab.Panes) - 1
 	}
-	MainTab().SetActive(a)
+	h.tab.SetActive(a)
 
 	return true
 }
@@ -1479,6 +1520,41 @@ func (h *BufPane) SpawnMultiCursor() bool {
 		InfoBar.Message("No matches found")
 	}
 
+	h.Relocate()
+	return true
+}
+
+// SpawnMultiCursorUp creates additional cursor, at the same X (if possible), one Y less.
+func (h *BufPane) SpawnMultiCursorUp() bool {
+	if h.Cursor.Y == 0 {
+		return false
+	} else {
+		h.Cursor.GotoLoc(buffer.Loc{h.Cursor.X, h.Cursor.Y - 1})
+		h.Cursor.Relocate()
+	}
+
+	c := buffer.NewCursor(h.Buf, buffer.Loc{h.Cursor.X, h.Cursor.Y + 1})
+	h.Buf.AddCursor(c)
+	h.Buf.SetCurCursor(h.Buf.NumCursors() - 1)
+	h.Buf.MergeCursors()
+
+	h.Relocate()
+	return true
+}
+
+// SpawnMultiCursorUp creates additional cursor, at the same X (if possible), one Y more.
+func (h *BufPane) SpawnMultiCursorDown() bool {
+	if h.Cursor.Y+1 == h.Buf.LinesNum() {
+		return false
+	} else {
+		h.Cursor.GotoLoc(buffer.Loc{h.Cursor.X, h.Cursor.Y + 1})
+		h.Cursor.Relocate()
+	}
+
+	c := buffer.NewCursor(h.Buf, buffer.Loc{h.Cursor.X, h.Cursor.Y - 1})
+	h.Buf.AddCursor(c)
+	h.Buf.SetCurCursor(h.Buf.NumCursors() - 1)
+	h.Buf.MergeCursors()
 	h.Relocate()
 	return true
 }

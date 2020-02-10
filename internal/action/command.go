@@ -12,13 +12,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	luar "layeh.com/gopher-luar"
-
 	shellquote "github.com/kballard/go-shellquote"
-	lua "github.com/yuin/gopher-lua"
 	"github.com/zyedidia/micro/internal/buffer"
 	"github.com/zyedidia/micro/internal/config"
-	ulua "github.com/zyedidia/micro/internal/lua"
 	"github.com/zyedidia/micro/internal/screen"
 	"github.com/zyedidia/micro/internal/shell"
 	"github.com/zyedidia/micro/internal/util"
@@ -72,29 +68,9 @@ func InitCommands() {
 
 // LuaMakeCommand is a function to easily create new commands
 // This can be called by plugins in Lua so that plugins can define their own commands
-func LuaMakeCommand(name, function string, completer buffer.Completer) {
-	action := LuaFunctionCommand(function)
-	commands[name] = Command{action, completer}
-}
-
-// LuaFunctionCommand returns a normal function
-// so that a command can be bound to a lua function
-func LuaFunctionCommand(fn string) func(*BufPane, []string) {
-	luaFn := strings.Split(fn, ".")
-	if len(luaFn) <= 1 {
-		return nil
-	}
-	plName, plFn := luaFn[0], luaFn[1]
-	pl := config.FindPlugin(plName)
-	if pl == nil {
-		return nil
-	}
-	return func(bp *BufPane, args []string) {
-		luaArgs := []lua.LValue{luar.New(ulua.L, bp), luar.New(ulua.L, args)}
-		_, err := pl.Call(plFn, luaArgs...)
-		if err != nil {
-			screen.TermMessage(err)
-		}
+func MakeCommand(name string, action func(bp *BufPane, args []string), completer buffer.Completer) {
+	if action != nil {
+		commands[name] = Command{action, completer}
 	}
 }
 
@@ -467,14 +443,13 @@ func SetGlobalOptionNative(option string, nativeValue interface{}) error {
 			} else {
 				screen.Screen.EnableMouse()
 			}
-			// autosave option has been removed
-			// } else if option == "autosave" {
-			// 	if nativeValue.(float64) > 0 {
-			// 		config.SetAutoTime(int(nativeValue.(float64)))
-			// 		config.StartAutoSave()
-			// 	} else {
-			// 		config.SetAutoTime(0)
-			// 	}
+		} else if option == "autosave" {
+			if nativeValue.(float64) > 0 {
+				config.SetAutoTime(int(nativeValue.(float64)))
+				config.StartAutoSave()
+			} else {
+				config.SetAutoTime(0)
+			}
 		} else if option == "paste" {
 			screen.Screen.SetPaste(nativeValue.(bool))
 		} else {
@@ -844,7 +819,7 @@ func (h *BufPane) TermCmd(args []string) {
 
 	term := func(i int, newtab bool) {
 		t := new(shell.Terminal)
-		t.Start(args, false, true, "", nil)
+		t.Start(args, false, true, nil, nil)
 
 		id := h.ID()
 		if newtab {
