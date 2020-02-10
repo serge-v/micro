@@ -73,7 +73,7 @@ func (h *BufPane) ExecCmd(args []string) {
 
 	b := buffer.NewBufferFromString(strings.TrimSpace(string(buf)), list[0], buffer.BTLog)
 	e := &qfixPane{
-		BufPane: NewBufPaneFromBuf(b),
+		BufPane: NewBufPaneFromBuf(b, nil),
 		text:    string(buf),
 		gocode:  args[0] == "gocode",
 		target:  h,
@@ -188,10 +188,8 @@ func (h *qfixPane) jumpToLine(ln grepLine) {
 		h.HandleCommand(fmt.Sprintf("tab %s:%d:%d", ln.fname, ln.line, ln.pos))
 	}
 
-	bp, ok := Tabs.List[Tabs.Active()].CurPane().(*BufPane)
-	if ok {
-		bp.Center()
-	}
+	bp := Tabs.List[Tabs.Active()].CurPane()
+	bp.Center()
 
 	InfoBar.Message(fmt.Sprintf("%s:%d:%d: %s", ln.fname, ln.line, ln.pos, ln.message))
 }
