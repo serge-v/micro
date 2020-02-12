@@ -73,13 +73,14 @@ func (h *BufPane) ExecCmd(args []string) {
 
 	b := buffer.NewBufferFromString(strings.TrimSpace(string(buf)), list[0], buffer.BTLog)
 	e := &qfixPane{
-		BufPane: NewBufPaneFromBuf(b, nil),
+		BufPane: NewBufPaneFromBuf(b, h.tab),
 		text:    string(buf),
 		gocode:  args[0] == "gocode",
 		target:  h,
 	}
 
-	e.splitID = MainTab().GetNode(h.splitID).HSplit(h.Buf.Settings["splitbottom"].(bool))
+	bottom := h.Buf.Settings["splitbottom"].(bool)
+	e.splitID = MainTab().GetNode(h.splitID).HSplit(bottom)
 	MainTab().Panes = append(MainTab().Panes, e)
 	MainTab().Resize()
 	MainTab().SetActive(len(MainTab().Panes) - 1)
@@ -105,6 +106,7 @@ func (h *qfixPane) HandleEvent(event tcell.Event) {
 				gl := parseGrepLine(line)
 				h.jumpToLine(gl)
 			}
+			h.Quit()
 			return
 		case tcell.KeyEsc:
 			h.Quit()
@@ -191,7 +193,8 @@ func (h *qfixPane) jumpToLine(ln grepLine) {
 	bp := Tabs.List[Tabs.Active()].CurPane()
 	bp.Center()
 
-	InfoBar.Message(fmt.Sprintf("%s:%d:%d: %s", ln.fname, ln.line, ln.pos, ln.message))
+	//	fname:=filepath.Base(ln.Fname)
+	//	InfoBar.Message(fmt.Sprintf("%s:%d:%d: %s", ln.fname, ln.line, ln.pos, ln.message))
 }
 
 type grepLine struct {

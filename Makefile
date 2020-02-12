@@ -8,8 +8,11 @@ DATE = $(shell GOOS=$(shell go env GOHOSTOS) GOARCH=$(shell go env GOHOSTARCH) \
 ADDITIONAL_GO_LINKER_FLAGS = $(shell GOOS=$(shell go env GOHOSTOS) \
 	GOARCH=$(shell go env GOHOSTARCH))
 GOBIN ?= $(shell go env GOPATH)/bin
-GOVARS = -X github.com/zyedidia/micro/internal/util.Version=$(VERSION) -X github.com/zyedidia/micro/internal/util.CommitHash=$(HASH) -X 'github.com/zyedidia/micro/internal/util.CompileDate=$(DATE)' -X github.com/zyedidia/micro/internal/util.Debug=ON
-
+GOVARS = -X github.com/zyedidia/micro/internal/util.Version=$(VERSION) \
+	-X github.com/zyedidia/micro/internal/util.CommitHash=$(HASH) \
+	-X 'github.com/zyedidia/micro/internal/util.CompileDate=$(DATE)' \
+	-X github.com/zyedidia/micro/internal/util.Debug=ON
+	
 # Builds micro after checking dependencies but without updating the runtime
 build:
 	go build -ldflags "-s -w $(GOVARS) $(ADDITIONAL_GO_LINKER_FLAGS)" ./cmd/micro
