@@ -15,7 +15,7 @@ GOVARS = -X github.com/zyedidia/micro/internal/util.Version=$(VERSION) \
 	
 # Builds micro after checking dependencies but without updating the runtime
 build:
-	go build -ldflags "-s -w $(GOVARS) $(ADDITIONAL_GO_LINKER_FLAGS)" ./cmd/micro
+	@go build -ldflags "-s -w $(GOVARS) $(ADDITIONAL_GO_LINKER_FLAGS)" ./cmd/micro
 
 build-dbg:
 	go build -ldflags "-s -w $(ADDITIONAL_GO_LINKER_FLAGS)" ./cmd/micro

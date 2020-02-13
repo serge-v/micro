@@ -64,14 +64,20 @@ func (h *BufPane) ExecCmd(args []string) {
 	cmd.Env = append(cmd.Env, "MICRO_FILE_OFFSET="+offset)
 
 	buf, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Println("exec:", err, "out:", string(buf))
+	text := strings.TrimSpace(string(buf))
+	if text == "" && err != nil {
+		log.Println("exec:", err)
 		InfoBar.Error(err.Error())
+		return
 	}
 
 	// create horizontal pane with output text
+	if text == "" && err == nil {
+		InfoBar.Message(list[0], ":0")
+		return
+	}
 
-	b := buffer.NewBufferFromString(strings.TrimSpace(string(buf)), list[0], buffer.BTLog)
+	b := buffer.NewBufferFromString(text, list[0], buffer.BTLog)
 	e := &qfixPane{
 		BufPane: NewBufPaneFromBuf(b, h.tab),
 		text:    string(buf),
