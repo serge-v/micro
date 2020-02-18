@@ -20,6 +20,8 @@ set colorscheme twilight
 Micro comes with a number of colorschemes by default. The colorschemes that you
 can display will depend on what kind of color support your terminal has.
 
+Omit color-link default "[fg color],[bg color]" will make the background color match the terminal's, and transparency if set.
+
 Modern terminals tend to have a palette of 16 user-configurable colors (these
 colors can often be configured in the terminal preferences), and additional
 color support comes in three flavors.
@@ -93,6 +95,7 @@ variable `MICRO_TRUECOLOR` must be set to 1.
   look its best. Use cmc-16 if your terminal doesn't support true color.
 * `gruvbox-tc`: The true color version of the gruvbox colorscheme
 * `github-tc`: The true color version of the Github colorscheme
+* `material-tc`: Colorscheme based off of Google's Material Design palette
 
 ## Creating a Colorscheme
 

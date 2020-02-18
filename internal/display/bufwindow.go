@@ -136,9 +136,6 @@ func (w *BufWindow) Relocate() bool {
 	if w.drawStatus {
 		h--
 	}
-	if b.LinesNum() <= h {
-		height = w.Height
-	}
 	ret := false
 	activeC := w.Buf.GetActiveCursor()
 	cy := activeC.Y
@@ -275,14 +272,7 @@ func (w *BufWindow) LocFromVisual(svloc buffer.Loc) buffer.Loc {
 					if vloc.Y >= bufHeight {
 						break
 					}
-					vloc.X = 0
-					if b.Settings["diffgutter"].(bool) {
-						vloc.X++
-					}
-					// This will draw an empty line number because the current line is wrapped
-					if b.Settings["ruler"].(bool) {
-						vloc.X += maxLineNumLength + 1
-					}
+					vloc.X = w.gutterOffset
 				}
 			}
 		}
@@ -410,11 +400,13 @@ func (w *BufWindow) displayBuffer() {
 	if len(b.Modifications) > 0 {
 		if b.Settings["syntax"].(bool) && b.SyntaxDef != nil {
 			for _, r := range b.Modifications {
+				rx := util.Clamp(r.X, 0, b.LinesNum())
+				ry := util.Clamp(r.Y, 0, b.LinesNum())
 				final := -1
-				for i := r.X; i <= r.Y; i++ {
+				for i := rx; i <= ry; i++ {
 					final = util.Max(b.Highlighter.ReHighlightStates(b, i), final)
 				}
-				b.Highlighter.HighlightMatches(b, r.X, final+1)
+				b.Highlighter.HighlightMatches(b, rx, final+1)
 			}
 		}
 
@@ -430,7 +422,7 @@ func (w *BufWindow) displayBuffer() {
 				// be another call to UpdateDiff when displayBuffer is called
 				// during the redraw.
 				if !synchronous {
-					screen.DrawChan <- true
+					screen.Redraw()
 				}
 			})
 		}
@@ -450,12 +442,14 @@ func (w *BufWindow) displayBuffer() {
 				r := c.RuneUnder(curX)
 				rl := c.RuneUnder(curX - 1)
 				if r == bp[0] || r == bp[1] || rl == bp[0] || rl == bp[1] {
-					mb, left := b.FindMatchingBrace(bp, curLoc)
-					matchingBraces = append(matchingBraces, mb)
-					if !left {
-						matchingBraces = append(matchingBraces, curLoc)
-					} else {
-						matchingBraces = append(matchingBraces, curLoc.Move(-1, b))
+					mb, left, found := b.FindMatchingBrace(bp, curLoc)
+					if found {
+						matchingBraces = append(matchingBraces, mb)
+						if !left {
+							matchingBraces = append(matchingBraces, curLoc)
+						} else {
+							matchingBraces = append(matchingBraces, curLoc.Move(-1, b))
+						}
 					}
 				}
 			}
@@ -641,9 +635,13 @@ func (w *BufWindow) displayBuffer() {
 						break
 					}
 					vloc.X = 0
+					if hasMessage {
+						w.drawGutter(&vloc, &bloc)
+					}
 					if b.Settings["diffgutter"].(bool) {
 						w.drawDiffGutter(lineNumStyle, true, &vloc, &bloc)
 					}
+
 					// This will draw an empty line number because the current line is wrapped
 					if b.Settings["ruler"].(bool) {
 						w.drawLineNum(lineNumStyle, true, maxLineNumLength, &vloc, &bloc)

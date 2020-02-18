@@ -18,6 +18,7 @@ import (
 
 	luar "layeh.com/gopher-luar"
 
+	dmp "github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/zyedidia/micro/internal/config"
 	ulua "github.com/zyedidia/micro/internal/lua"
 	"github.com/zyedidia/micro/internal/screen"
@@ -26,7 +27,6 @@ import (
 	"golang.org/x/text/encoding/htmlindex"
 	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/transform"
-	dmp "github.com/sergi/go-diff/diffmatchpatch"
 )
 
 const backupTime = 8000
@@ -75,6 +75,10 @@ type SharedBuffer struct {
 	// Type of the buffer (e.g. help, raw, scratch etc..)
 	Type BufType
 
+	// ReloadDisabled allows the user to disable reloads if they
+	// are viewing a file that is constantly changing
+	ReloadDisabled bool
+
 	isModified bool
 	// Whether or not suggestions can be autocompleted must be shared because
 	// it changes based on how the buffer has changed
@@ -82,6 +86,9 @@ type SharedBuffer struct {
 
 	// Modifications is the list of modified regions for syntax highlighting
 	Modifications []Loc
+
+	// Hash of the original buffer -- empty if fastdirty is on
+	origHash [md5.Size]byte
 }
 
 func (b *SharedBuffer) insert(pos Loc, value []byte) {
@@ -98,6 +105,11 @@ func (b *SharedBuffer) remove(start, end Loc) []byte {
 	b.HasSuggestions = false
 	b.Modifications = append(b.Modifications, Loc{start.Y, start.Y})
 	return b.LineArray.remove(start, end)
+}
+
+// DisableReload disables future reloads of this sharedbuffer
+func (b *SharedBuffer) DisableReload() {
+	b.ReloadDisabled = true
 }
 
 const (
@@ -137,9 +149,6 @@ type Buffer struct {
 	// The Highlighter struct actually performs the highlighting
 	Highlighter   *highlight.Highlighter
 	HighlightLock sync.Mutex
-
-	// Hash of the original buffer -- empty if fastdirty is on
-	origHash [md5.Size]byte
 
 	// Settings customized by the user
 	Settings map[string]interface{}
@@ -215,7 +224,8 @@ func NewBuffer(r io.Reader, size int64, path string, startcursor Loc, btype BufT
 
 	b.Settings = config.DefaultCommonSettings()
 	for k, v := range config.GlobalSettings {
-		if _, ok := b.Settings[k]; ok {
+		if _, ok := config.DefaultGlobalOnlySettings[k]; !ok {
+			// make sure setting is not global-only
 			b.Settings[k] = v
 		}
 	}
@@ -272,8 +282,8 @@ func NewBuffer(r io.Reader, size int64, path string, startcursor Loc, btype BufT
 	b.UpdateRules()
 	config.InitLocalSettings(b.Settings, b.Path)
 
-	if _, err := os.Stat(config.ConfigDir + "/buffers/"); os.IsNotExist(err) {
-		os.Mkdir(config.ConfigDir+"/buffers/", os.ModePerm)
+	if _, err := os.Stat(filepath.Join(config.ConfigDir, "buffers")); os.IsNotExist(err) {
+		os.Mkdir(filepath.Join(config.ConfigDir, "buffers"), os.ModePerm)
 	}
 
 	if startcursor.X != -1 && startcursor.Y != -1 {
@@ -425,6 +435,9 @@ func (b *Buffer) ReOpen() error {
 	b.EventHandler.ApplyDiff(txt)
 
 	err = b.UpdateModTime()
+	if !b.Settings["fastdirty"].(bool) {
+		calcHash(b, &b.origHash)
+	}
 	b.isModified = false
 	b.RelocateCursors()
 	return err
@@ -644,7 +657,7 @@ func (b *Buffer) UpdateRules() {
 			go func() {
 				b.Highlighter.HighlightStates(b)
 				b.Highlighter.HighlightMatches(b, 0, b.End().Y)
-				screen.DrawChan <- true
+				screen.Redraw()
 			}()
 		}
 	}
@@ -763,6 +776,7 @@ func (b *Buffer) ClearCursors() {
 	b.UpdateCursors()
 	b.curCursor = 0
 	b.GetActiveCursor().ResetSelection()
+	log.Println("Cleared cursors:", len(b.cursors))
 }
 
 // MoveLinesUp moves the range of lines up one row
@@ -821,7 +835,7 @@ var BracePairs = [][2]rune{
 // returns the location of the matching brace
 // if the boolean returned is true then the original matching brace is one character left
 // of the starting location
-func (b *Buffer) FindMatchingBrace(braceType [2]rune, start Loc) (Loc, bool) {
+func (b *Buffer) FindMatchingBrace(braceType [2]rune, start Loc) (Loc, bool, bool) {
 	curLine := []rune(string(b.LineBytes(start.Y)))
 	startChar := ' '
 	if start.X >= 0 && start.X < len(curLine) {
@@ -851,9 +865,9 @@ func (b *Buffer) FindMatchingBrace(braceType [2]rune, start Loc) (Loc, bool) {
 					i--
 					if i == 0 {
 						if startChar == braceType[0] {
-							return Loc{x, y}, false
+							return Loc{x, y}, false, true
 						}
-						return Loc{x, y}, true
+						return Loc{x, y}, true, true
 					}
 				}
 			}
@@ -875,9 +889,9 @@ func (b *Buffer) FindMatchingBrace(braceType [2]rune, start Loc) (Loc, bool) {
 					i--
 					if i == 0 {
 						if leftChar == braceType[1] {
-							return Loc{x, y}, true
+							return Loc{x, y}, true, true
 						}
-						return Loc{x, y}, false
+						return Loc{x, y}, false, true
 					}
 				} else if r == braceType[1] {
 					i++
@@ -885,7 +899,7 @@ func (b *Buffer) FindMatchingBrace(braceType [2]rune, start Loc) (Loc, bool) {
 			}
 		}
 	}
-	return start, true
+	return start, true, false
 }
 
 // Retab changes all tabs to spaces or vice versa
@@ -908,6 +922,7 @@ func (b *Buffer) Retab() {
 
 		l = bytes.TrimLeft(l, " \t")
 		b.lines[i].data = append(ws, l...)
+		b.Modifications = append(b.Modifications, Loc{i, i})
 		dirty = true
 	}
 
@@ -1032,7 +1047,7 @@ func (b *Buffer) SetDiffBase(diffBase []byte) {
 		b.diffBaseLineCount = strings.Count(string(diffBase), "\n")
 	}
 	b.UpdateDiff(func(synchronous bool) {
-		screen.DrawChan <- true
+		screen.Redraw()
 	})
 }
 

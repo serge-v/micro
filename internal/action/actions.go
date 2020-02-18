@@ -283,7 +283,7 @@ func (h *BufPane) SelectWordLeft() bool {
 	return true
 }
 
-// StartOfLine moves the cursor to the start of the text of the line
+// StartOfText moves the cursor to the start of the text of the line
 func (h *BufPane) StartOfText() bool {
 	h.Cursor.Deselect(true)
 	h.Cursor.StartOfText()
@@ -396,6 +396,7 @@ func (h *BufPane) CursorStart() bool {
 	h.Cursor.Deselect(true)
 	h.Cursor.X = 0
 	h.Cursor.Y = 0
+	h.Cursor.StoreVisualX()
 	h.Relocate()
 	return true
 }
@@ -566,6 +567,20 @@ func (h *BufPane) IndentSelection() bool {
 	return false
 }
 
+// IndentLine moves the current line forward one indentation
+func (h *BufPane) IndentLine() bool {
+	if h.Cursor.HasSelection() {
+		return false
+	}
+
+	tabsize := int(h.Buf.Settings["tabsize"].(float64))
+	indentstr := h.Buf.IndentString(tabsize)
+	h.Buf.Insert(buffer.Loc{X: 0, Y: h.Cursor.Y}, indentstr)
+	h.Buf.RelocateCursors()
+	h.Relocate()
+	return true
+}
+
 // OutdentLine moves the current line back one indentation
 func (h *BufPane) OutdentLine() bool {
 	if h.Cursor.HasSelection() {
@@ -718,23 +733,30 @@ func (h *BufPane) saveBufToFile(filename string, action string, callback func())
 	err := h.Buf.SaveAs(filename)
 	if err != nil {
 		if strings.HasSuffix(err.Error(), "permission denied") {
-			InfoBar.YNPrompt("Permission denied. Do you want to save this file using sudo? (y,n)", func(yes, canceled bool) {
-				if yes && !canceled {
-					err = h.Buf.SaveAsWithSudo(filename)
-					if err != nil {
-						InfoBar.Error(err)
-					} else {
-						h.Buf.Path = filename
-						h.Buf.SetName(filename)
-						InfoBar.Message("Saved " + filename)
+			saveWithSudo := func() {
+				err = h.Buf.SaveAsWithSudo(filename)
+				if err != nil {
+					InfoBar.Error(err)
+				} else {
+					h.Buf.Path = filename
+					h.Buf.SetName(filename)
+					InfoBar.Message("Saved " + filename)
+				}
+			}
+			if h.Buf.Settings["autosu"].(bool) {
+				saveWithSudo()
+			} else {
+				InfoBar.YNPrompt("Permission denied. Do you want to save this file using sudo? (y,n)", func(yes, canceled bool) {
+					if yes && !canceled {
+						saveWithSudo()
+						h.completeAction(action)
 					}
-					h.completeAction(action)
-				}
-				if callback != nil {
-					callback()
-				}
-			})
-			return false
+					if callback != nil {
+						callback()
+					}
+				})
+				return false
+			}
 		} else {
 			InfoBar.Error(err)
 		}
@@ -1060,11 +1082,15 @@ func (h *BufPane) JumpToMatchingBrace() bool {
 		r := h.Cursor.RuneUnder(h.Cursor.X)
 		rl := h.Cursor.RuneUnder(h.Cursor.X - 1)
 		if r == bp[0] || r == bp[1] || rl == bp[0] || rl == bp[1] {
-			matchingBrace, left := h.Buf.FindMatchingBrace(bp, h.Cursor.Loc)
-			if left {
-				h.Cursor.GotoLoc(matchingBrace)
+			matchingBrace, left, found := h.Buf.FindMatchingBrace(bp, h.Cursor.Loc)
+			if found {
+				if left {
+					h.Cursor.GotoLoc(matchingBrace)
+				} else {
+					h.Cursor.GotoLoc(matchingBrace.Move(1, h.Buf))
+				}
 			} else {
-				h.Cursor.GotoLoc(matchingBrace.Move(1, h.Buf))
+				return false
 			}
 		}
 	}
@@ -1220,7 +1246,7 @@ func (h *BufPane) ToggleDiffGutter() bool {
 	if !h.Buf.Settings["diffgutter"].(bool) {
 		h.Buf.Settings["diffgutter"] = true
 		h.Buf.UpdateDiff(func(synchronous bool) {
-			screen.DrawChan <- true
+			screen.Redraw()
 		})
 		InfoBar.Message("Enabled diff gutter")
 	} else {
@@ -1542,7 +1568,7 @@ func (h *BufPane) SpawnMultiCursorUp() bool {
 	return true
 }
 
-// SpawnMultiCursorUp creates additional cursor, at the same X (if possible), one Y more.
+// SpawnMultiCursorDown creates additional cursor, at the same X (if possible), one Y more.
 func (h *BufPane) SpawnMultiCursorDown() bool {
 	if h.Cursor.Y+1 == h.Buf.LinesNum() {
 		return false

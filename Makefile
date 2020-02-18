@@ -20,6 +20,9 @@ build:
 build-dbg:
 	go build -ldflags "-s -w $(ADDITIONAL_GO_LINKER_FLAGS)" ./cmd/micro
 
+build-tags: fetch-tags
+	go build -ldflags "-s -w $(GOVARS) $(ADDITIONAL_GO_LINKER_FLAGS)" ./cmd/micro
+
 # Builds micro after building the runtime and checking dependencies
 build-all: runtime build
 
@@ -37,6 +40,9 @@ install-all: runtime install
 # Same as 'build-quick' but installs to $GOBIN afterward
 install-quick:
 	go install -ldflags "-s -w $(GOVARS) $(ADDITIONAL_GO_LINKER_FLAGS)"  ./cmd/micro
+
+fetch-tags:
+	git fetch --tags
 
 # Builds the runtime
 runtime:

@@ -120,23 +120,26 @@ func (b *Buffer) FindNext(s string, start, end, from Loc, down bool, useRegex bo
 	if down {
 		l, found = b.findDown(r, from, end)
 		if !found {
-			l, found = b.findDown(r, start, from)
+			l, found = b.findDown(r, start, end)
 		}
 	} else {
 		l, found = b.findUp(r, from, start)
 		if !found {
-			l, found = b.findUp(r, end, from)
+			l, found = b.findUp(r, end, start)
 		}
 	}
 	return l, found, nil
 }
 
 // ReplaceRegex replaces all occurrences of 'search' with 'replace' in the given area
-// and returns the number of replacements made
-func (b *Buffer) ReplaceRegex(start, end Loc, search *regexp.Regexp, replace []byte) int {
+// and returns the number of replacements made and the number of runes
+// added or removed
+func (b *Buffer) ReplaceRegex(start, end Loc, search *regexp.Regexp, replace []byte) (int, int) {
 	if start.GreaterThan(end) {
 		start, end = end, start
 	}
+
+	netrunes := 0
 
 	found := 0
 	var deltas []Delta
@@ -155,8 +158,13 @@ func (b *Buffer) ReplaceRegex(start, end Loc, search *regexp.Regexp, replace []b
 			l = util.SliceStart(l, end.X)
 		}
 		newText := search.ReplaceAllFunc(l, func(in []byte) []byte {
+			result := []byte{}
+			for _, submatches := range search.FindAllSubmatchIndex(in, -1) {
+				result = search.Expand(result, replace, in, submatches)
+			}
 			found++
-			return replace
+			netrunes += utf8.RuneCount(in) - utf8.RuneCount(result)
+			return result
 		})
 
 		from := Loc{charpos, i}
@@ -166,5 +174,5 @@ func (b *Buffer) ReplaceRegex(start, end Loc, search *regexp.Regexp, replace []b
 	}
 	b.MultipleReplace(deltas)
 
-	return found
+	return found, netrunes
 }

@@ -107,7 +107,7 @@ func (h *BufPane) PluginCmd(args []string) {
 	}
 
 	if h.Buf.Type != buffer.BTLog {
-		OpenLogBuf(h)
+		h.OpenLogBuf()
 	}
 
 	config.PluginCommand(buffer.LogBuf, args[0], args[1:])
@@ -273,7 +273,7 @@ func (h *BufPane) OpenCmd(args []string) {
 // ToggleLogCmd toggles the log view
 func (h *BufPane) ToggleLogCmd(args []string) {
 	if h.Buf.Type != buffer.BTLog {
-		OpenLogBuf(h)
+		h.OpenLogBuf()
 	} else {
 		h.Quit()
 	}
@@ -476,7 +476,7 @@ func SetGlobalOptionNative(option string, nativeValue interface{}) error {
 		b.SetOptionNative(option, nativeValue)
 	}
 
-	return config.WriteSettings(config.ConfigDir + "/settings.json")
+	return config.WriteSettings(filepath.Join(config.ConfigDir, "settings.json"))
 }
 
 func SetGlobalOption(option, value string) error {
@@ -733,23 +733,22 @@ func (h *BufPane) ReplaceCmd(args []string) {
 
 	nreplaced := 0
 	start := h.Buf.Start()
-	// end := h.Buf.End()
-	// if h.Cursor.HasSelection() {
-	// 	start = h.Cursor.CurSelection[0]
-	// 	end = h.Cursor.CurSelection[1]
-	// }
+	end := h.Buf.End()
+	if h.Cursor.HasSelection() {
+		start = h.Cursor.CurSelection[0]
+		end = h.Cursor.CurSelection[1]
+	}
 	if all {
-		nreplaced = h.Buf.ReplaceRegex(start, h.Buf.End(), regex, replace)
+		nreplaced, _ = h.Buf.ReplaceRegex(start, end, regex, replace)
 	} else {
 		inRange := func(l buffer.Loc) bool {
-			return l.GreaterEqual(start) && l.LessEqual(h.Buf.End())
+			return l.GreaterEqual(start) && l.LessEqual(end)
 		}
 
 		searchLoc := start
-		searching := true
 		var doReplacement func()
 		doReplacement = func() {
-			locs, found, err := h.Buf.FindNext(search, start, h.Buf.End(), searchLoc, true, !noRegex)
+			locs, found, err := h.Buf.FindNext(search, start, end, searchLoc, true, !noRegex)
 			if err != nil {
 				InfoBar.Error(err)
 				return
@@ -765,10 +764,11 @@ func (h *BufPane) ReplaceCmd(args []string) {
 
 			InfoBar.YNPrompt("Perform replacement (y,n,esc)", func(yes, canceled bool) {
 				if !canceled && yes {
-					h.Buf.Replace(locs[0], locs[1], replaceStr)
+					_, nrunes := h.Buf.ReplaceRegex(locs[0], locs[1], regex, replace)
 
 					searchLoc = locs[0]
-					searchLoc.X += utf8.RuneCount(replace)
+					searchLoc.X += nrunes + locs[0].Diff(locs[1], h.Buf)
+					end.Move(nrunes, h.Buf)
 					h.Cursor.Loc = searchLoc
 					nreplaced++
 				} else if !canceled && !yes {
@@ -779,9 +779,7 @@ func (h *BufPane) ReplaceCmd(args []string) {
 					h.Buf.RelocateCursors()
 					return
 				}
-				if searching {
-					doReplacement()
-				}
+				doReplacement()
 			})
 		}
 		doReplacement()
@@ -808,6 +806,11 @@ func (h *BufPane) ReplaceAllCmd(args []string) {
 func (h *BufPane) TermCmd(args []string) {
 	ps := h.tab.Panes
 
+	if !TermEmuSupported {
+		InfoBar.Error("Terminal emulator not supported on this system")
+		return
+	}
+
 	if len(args) == 0 {
 		sh := os.Getenv("SHELL")
 		if sh == "" {
@@ -831,7 +834,12 @@ func (h *BufPane) TermCmd(args []string) {
 		}
 
 		v := h.GetView()
-		MainTab().Panes[i] = NewTermPane(v.X, v.Y, v.Width, v.Height, t, id, MainTab())
+		tp, err := NewTermPane(v.X, v.Y, v.Width, v.Height, t, id, MainTab())
+		if err != nil {
+			InfoBar.Error(err)
+			return
+		}
+		MainTab().Panes[i] = tp
 		MainTab().SetActive(i)
 	}
 

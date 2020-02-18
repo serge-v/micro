@@ -11,7 +11,7 @@ from the go plugin, which has the following file structure:
 ```
 ~/.config/micro/plug/go-plugin/
     go.lua
-    info.json
+    repo.json
     help/
         go-plugin.md
 ```
@@ -34,34 +34,6 @@ cases a plugin may also want to add colorschemes or syntax files. It
 is unlikely for a plugin to need to add plugin files at runtime or
 syntax header files. No directory structure is enforced but keeping
 runtime files in their own directories is good practice.
-
-# Info file
-
-The `info.json` for the Go plugin is the following:
-
-```
-{
-    "name": "go",
-    "description": "Go formatting and tool support",
-    "website": "https://github.com/micro-editor/go-plugin",
-	"install": "https://github.com/micro-editor/go-plugin",
-    "version": "1.0.0",
-    "require": [
-        "micro >= 2.0.0"
-    ]
-}
-```
-
-All fields are simply interpreted as strings, so the version does not
-need to be a semantic version, and the dependencies are also only
-meant to be parsed by humans. The name should be an identifier, and
-the website should point to a valid website. The install field should
-provide info about installing the plugin, or point to a website that
-provides information.
-
-Note that the name of the plugin is defined by the name field in
-the `info.json` and not by the installation path. Some functions micro
-exposes to plugins require passing the name of the plugin.
 
 ## Lua callbacks
 
@@ -102,16 +74,6 @@ within.  This is almost always the current bufpane.
 
 All available actions are listed in the keybindings section of the help.
 
-For callbacks to mouse actions, you are also given the event info:
-
-```lua
-function onMousePress(view, event)
-    local x, y = event:Position()
-
-    return false
-end
-```
-
 These functions should also return a boolean specifying whether the bufpane
 should be relocated to the cursor or not after the action is complete.
 
@@ -141,7 +103,12 @@ The packages and functions are listed below (in Go type signatures):
        `-debug` flag, or binary built with `build-dbg`).
 
     - `SetStatusInfoFn(fn string)`: register the given lua function as
-       accessible from the statusline formatting options
+       accessible from the statusline formatting options.
+
+    - `CurPane() *BufPane`: returns the current BufPane, or nil if the
+       current pane is not a BufPane.
+
+    - `CurTab() *Tab`: returns the current tab.
 * `micro/config`
 	- `MakeCommand(name string, action func(bp *BufPane, args[]string),
                    completer buffer.Completer)`:
@@ -424,6 +391,9 @@ There are 6 default plugins that come pre-installed with micro. These are
    programming tool.
 * `status`: provides some extensions to the status line (integration with
    Git and more).
+* `diff`: integrates the `diffgutter` option with Git. If you are in a Git
+   directory, the diff gutter will show changes with respect to the most
+   recent Git commit rather than the diff since opening the file.
 
 See `> help linter`, `> help comment`, and `> help status` for additional
 documentation specific to those plugins.

@@ -16,6 +16,22 @@ Here are the available options:
 
 	default value: `true`
 
+* `autosave`: automatically save the buffer every n seconds, where n is the
+   value of the autosave option. Also when quitting on a modified buffer, micro
+   will automatically save and quit. Be warned, this option saves the buffer
+   without prompting the user, so data may be overwritten. If this option is
+   set to `0`, no autosaving is performed.
+
+    default value: `0`
+
+* `autosu`: When a file is saved that the user doesn't have permission to
+   modify, micro will ask if the user would like to use super user
+   privileges to save the file. If this option is enabled, micro will
+   automatically attempt to use super user privileges to save without
+   asking the user.
+
+    default value: `false`
+
 * `backup`: micro will automatically keep backups of all open buffers. Backups
    are stored in `~/.config/micro/backups` and are removed when the buffer is
    closed cleanly. In the case of a system crash or a micro crash, the contents
@@ -79,10 +95,10 @@ Here are the available options:
    This is fast, but can be inaccurate. If `fastdirty` is off, then micro will
    hash the current buffer against a hash of the original file (created when
    the buffer was loaded). This is more accurate but obviously more resource
-   intensive. This option is only for people who really care about having
-   accurate modified status.
+   intensive. This option will be automatically disabled if the file size
+   exceeds 50KB.
 
-	default value: `true`
+	default value: `false`
 
 * `fileformat`: this determines what kind of line endings micro will use for
    the file. UNIX line endings are just `\n` (linefeed) whereas dos line
@@ -154,6 +170,19 @@ Here are the available options:
    copying and pasting in a terminal environment.
 
     default value: `false`
+
+* `pluginchannels`: list of URLs pointing to plugin channels for downloading and
+   installing plugins. A plugin channel consists of a json file with links to
+   plugin repos, which store information about plugin versions and download URLs.
+   By default, this option points to the official plugin channel hosted on GitHub
+   at https://github.com/micro-editor/plugin-channel.
+
+    default value: `https://raw.githubusercontent.com/micro-editor/plugin-channel
+                    /master/channel.json`
+
+* `pluginrepos`: a list of links to plugin repositories.
+
+    default value: ``
 
 * `readonly`: when enabled, disallows edits to the buffer. It is recommended
    to only ever set this option locally using `setlocal`.
@@ -267,10 +296,32 @@ Here are the available options:
 
 	default value: `true`
 
+* `xterm`: micro will assume that the terminal it is running in conforms to
+  `xterm-256color` regardless of what the `$TERM` variable actually contains.
+   Enabling this option may cause unwanted effects if your terminal in fact
+   does not conform to the `xterm-256color` standard.
+
+    Default value: `false`
+
 ---
 
 Plugin options: all plugins come with a special option to enable or disable
 them. The option is a boolean with the same name as the plugin itself.
+
+By default, the following plugins are provided, each with an option to enable
+or disable them:
+
+* `autoclose`: automatically closes brackets, quotes, etc...
+* `comment`: provides automatic commenting for a number of languages
+* `ftoptions`: alters some default options depending on the filetype
+* `linter`: provides extensible linting for many languages
+* `literate`: provides advanced syntax highlighting for the Literate
+   programming tool.
+* `status`: provides some extensions to the status line (integration with
+   Git and more).
+* `diff`: integrates the `diffgutter` option with Git. If you are in a Git
+   directory, the diff gutter will show changes with respect to the most
+   recent Git commit rather than the diff since opening the file.
 
 Any option you set in the editor will be saved to the file
 ~/.config/micro/settings.json so, in effect, your configuration file will be 
