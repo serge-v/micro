@@ -62,6 +62,8 @@ func (h *BufPane) ExecCmd(args []string) {
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "MICRO_FILE_PATH="+h.Buf.AbsPath)
 	cmd.Env = append(cmd.Env, "MICRO_FILE_OFFSET="+offset)
+	sel := string(h.Cursor.GetSelection())
+	cmd.Env = append(cmd.Env, "MICRO_SELECTION="+sel)
 
 	buf, err := cmd.CombinedOutput()
 	text := strings.TrimSpace(string(buf))
