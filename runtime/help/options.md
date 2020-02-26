@@ -44,8 +44,8 @@ Here are the available options:
 
     default value: `true`
 
-* `basename`: in the infobar, show only the basename of the file being edited
-   rather than the full path.
+* `basename`: in the infobar and tabbar, show only the basename of the file
+   being edited rather than the full path.
 
     default value: `false`
 
@@ -85,9 +85,10 @@ Here are the available options:
 
     default value: `utf-8`
 
-* `eofnewline`: micro will automatically add a newline to the file.
+* `eofnewline`: micro will automatically add a newline to the end of the
+   file if one does not exist.
 
-	default value: `false`
+	default value: `true`
 
 * `fastdirty`: this determines what kind of algorithm micro uses to determine
    if a buffer is modified or not. When `fastdirty` is on, micro just uses a

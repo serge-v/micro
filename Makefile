@@ -18,7 +18,7 @@ build:
 	@go build -ldflags "-s -w $(GOVARS) $(ADDITIONAL_GO_LINKER_FLAGS)" ./cmd/micro
 
 build-dbg:
-	go build -ldflags "-s -w $(ADDITIONAL_GO_LINKER_FLAGS)" ./cmd/micro
+	go build -ldflags "-s -w $(ADDITIONAL_GO_LINKER_FLAGS) $(DEBUGVAR)" ./cmd/micro
 
 build-tags: fetch-tags
 	go build -ldflags "-s -w $(GOVARS) $(ADDITIONAL_GO_LINKER_FLAGS)" ./cmd/micro
@@ -53,8 +53,20 @@ runtime:
 	mv runtime.go internal/config
 	gofmt -w internal/config/runtime.go
 
+testgen:
+	mkdir -p tools/vscode-tests
+	cd tools/vscode-tests && \
+	curl --remote-name-all $(VSCODE_TESTS_BASE_URL){editableTextModelAuto,editableTextModel,model.line}.test.ts
+	tsc tools/vscode-tests/*.ts > /dev/null; true
+	go run tools/testgen.go tools/vscode-tests/*.js > buffer_generated_test.go
+	mv buffer_generated_test.go internal/buffer
+	gofmt -w internal/buffer/buffer_generated_test.go
+
 test:
 	go test ./internal/...
+
+bench:
+	go test -bench=. ./internal/...
 
 clean:
 	rm -f micro
