@@ -28,6 +28,10 @@ func (h *BufPane) ExecCmd(args []string) {
 		InfoBar.Message("usage: exec [-flags] command args...")
 		return
 	}
+	if h.Buf.Modified() {
+		saved := h.Save()
+		log.Println("save:", saved)
+	}
 
 	// substitute parameters
 
