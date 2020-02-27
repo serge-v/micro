@@ -118,7 +118,7 @@ func (h *qfixPane) HandleEvent(event tcell.Event) {
 				gl := parseGrepLine(line)
 				h.jumpToLine(gl)
 			}
-			h.Quit()
+			h.Close()
 			return
 		case tcell.KeyEsc:
 			h.Quit()
