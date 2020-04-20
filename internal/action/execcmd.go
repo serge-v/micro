@@ -6,11 +6,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
 
 	"github.com/zyedidia/micro/internal/buffer"
+	"github.com/zyedidia/micro/internal/util"
 	"github.com/zyedidia/tcell"
 )
 
@@ -20,6 +22,36 @@ type qfixPane struct {
 	text   string
 	gocode bool
 	target *BufPane
+}
+
+func compgen(b *buffer.Buffer) ([]string, []string) {
+	c := b.GetActiveCursor()
+	input, argstart := buffer.GetArg(b)
+
+	cmd := exec.Command("bash", "-c", "compgen -c "+input)
+	buf, err := cmd.Output()
+	if err != nil {
+		log.Println(err)
+		return nil, nil
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(buf)), "\n")
+
+	var suggestions []string
+
+	for _, option := range lines {
+		if strings.HasPrefix(option, input) {
+			suggestions = append(suggestions, option)
+		}
+	}
+
+	sort.Strings(suggestions)
+	completions := make([]string, len(suggestions))
+	for i := range suggestions {
+		completions[i] = util.SliceEndStr(suggestions[i], c.X-argstart)
+	}
+	return completions, suggestions
+
 }
 
 // ExecCmd executes the command with arguments from the current directory.
@@ -39,24 +71,27 @@ func (h *BufPane) ExecCmd(args []string) {
 	loc := buffer.Loc{h.Cursor.X, h.Cursor.Y}
 	offs := buffer.ByteOffset(loc, h.Buf)
 	offset := strconv.Itoa(offs)
+	sel := ""
+	word := ""
+	if h.Cursor.HasSelection() {
+		sel = string(h.Cursor.GetSelection())
+	} else {
+		h.Cursor.SelectWord()
+		word = strings.TrimSpace(string(h.Cursor.GetSelection()))
+		h.Cursor.Deselect(true)
+	}
+
+	repl := strings.NewReplacer(
+		"{s}", sel,
+		"{w}", word,
+		"{f}", h.Buf.AbsPath,
+		"{o}", offset,
+	)
 
 	for _, a := range args {
 		log.Println("arg", a)
-		switch {
-		case a == "{s}" && h.Cursor.HasSelection():
-			a = string(h.Cursor.GetSelection())
-		case a == "{w}":
-			h.Cursor.SelectWord()
-			a = strings.TrimSpace(string(h.Cursor.GetSelection()))
-			h.Cursor.Deselect(true)
-			if a == "" {
-				continue
-			}
-		case a == "{o}":
-			a = offset
-		case a == "{f}":
-			a = h.Buf.AbsPath
-		}
+		a = repl.Replace(a)
+		log.Println("expanded arg", a)
 		list = append(list, a)
 	}
 
@@ -66,8 +101,8 @@ func (h *BufPane) ExecCmd(args []string) {
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "MICRO_FILE_PATH="+h.Buf.AbsPath)
 	cmd.Env = append(cmd.Env, "MICRO_FILE_OFFSET="+offset)
-	sel := string(h.Cursor.GetSelection())
 	cmd.Env = append(cmd.Env, "MICRO_SELECTION="+sel)
+	cmd.Env = append(cmd.Env, "MICRO_CURR_WORD="+word)
 
 	buf, err := cmd.CombinedOutput()
 	text := strings.TrimSpace(string(buf))

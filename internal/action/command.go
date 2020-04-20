@@ -62,7 +62,7 @@ func InitCommands() {
 		"retab":      {(*BufPane).RetabCmd, nil},
 		"raw":        {(*BufPane).RawCmd, nil},
 		"textfilter": {(*BufPane).TextFilterCmd, nil},
-		"exec":       {(*BufPane).ExecCmd, buffer.FileComplete},
+		"exec":       {(*BufPane).ExecCmd, compgen},
 	}
 }
 
