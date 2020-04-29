@@ -734,7 +734,8 @@ func (h *BufPane) ReplaceCmd(args []string) {
 	nreplaced := 0
 	start := h.Buf.Start()
 	end := h.Buf.End()
-	if h.Cursor.HasSelection() {
+	selection := h.Cursor.HasSelection()
+	if selection {
 		start = h.Cursor.CurSelection[0]
 		end = h.Cursor.CurSelection[1]
 	}
@@ -761,6 +762,9 @@ func (h *BufPane) ReplaceCmd(args []string) {
 
 			h.Cursor.SetSelectionStart(locs[0])
 			h.Cursor.SetSelectionEnd(locs[1])
+			h.Cursor.GotoLoc(locs[0])
+
+			h.Relocate()
 
 			InfoBar.YNPrompt("Perform replacement (y,n,esc)", func(yes, canceled bool) {
 				if !canceled && yes {
@@ -786,14 +790,22 @@ func (h *BufPane) ReplaceCmd(args []string) {
 	}
 
 	h.Buf.RelocateCursors()
+	h.Relocate()
 
+	var s string
 	if nreplaced > 1 {
-		InfoBar.Message("Replaced ", nreplaced, " occurrences of ", search)
+		s = fmt.Sprintf("Replaced %d occurrences of %s", nreplaced, search)
 	} else if nreplaced == 1 {
-		InfoBar.Message("Replaced ", nreplaced, " occurrence of ", search)
+		s = fmt.Sprintf("Replaced 1 occurrence of %s", search)
 	} else {
-		InfoBar.Message("Nothing matched ", search)
+		s = fmt.Sprintf("Nothing matched %s", search)
 	}
+
+	if selection {
+		s += " in selection"
+	}
+
+	InfoBar.Message(s)
 }
 
 // ReplaceAllCmd replaces search term all at once
@@ -822,7 +834,11 @@ func (h *BufPane) TermCmd(args []string) {
 
 	term := func(i int, newtab bool) {
 		t := new(shell.Terminal)
-		t.Start(args, false, true, nil, nil)
+		err := t.Start(args, false, true, nil, nil)
+		if err != nil {
+			InfoBar.Error(err)
+			return
+		}
 
 		id := h.ID()
 		if newtab {

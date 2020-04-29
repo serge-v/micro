@@ -556,7 +556,7 @@ func (w *BufWindow) displayBuffer() {
 				}
 
 				if s, ok := config.Colorscheme["color-column"]; ok {
-					if colorcolumn != 0 && vloc.X-w.gutterOffset == colorcolumn {
+					if colorcolumn != 0 && vloc.X-w.gutterOffset+w.StartCol == colorcolumn {
 						fg, _, _ := s.Decompose()
 						style = style.Background(fg)
 					}
@@ -650,7 +650,7 @@ func (w *BufWindow) displayBuffer() {
 		for i := vloc.X; i < bufWidth; i++ {
 			curStyle := style
 			if s, ok := config.Colorscheme["color-column"]; ok {
-				if colorcolumn != 0 && i-w.gutterOffset == colorcolumn {
+				if colorcolumn != 0 && i-w.gutterOffset+w.StartCol == colorcolumn {
 					fg, _, _ := s.Decompose()
 					curStyle = style.Background(fg)
 				}

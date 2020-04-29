@@ -291,6 +291,19 @@ func (h *BufPane) StartOfText() bool {
 	return true
 }
 
+// StartOfTextToggle toggles the cursor between the start of the text of the line
+// and the start of the line
+func (h *BufPane) StartOfTextToggle() bool {
+	h.Cursor.Deselect(true)
+	if h.Cursor.IsStartOfText() {
+		h.Cursor.Start()
+	} else {
+		h.Cursor.StartOfText()
+	}
+	h.Relocate()
+	return true
+}
+
 // StartOfLine moves the cursor to the start of the line
 func (h *BufPane) StartOfLine() bool {
 	h.Cursor.Deselect(true)
@@ -324,6 +337,23 @@ func (h *BufPane) SelectToStartOfText() bool {
 	h.Relocate()
 	return true
 }
+
+// SelectToStartOfTextToggle toggles the selection between the start of the text
+// on the current line and the start of the line
+func (h *BufPane) SelectToStartOfTextToggle() bool {
+	if !h.Cursor.HasSelection() {
+		h.Cursor.OrigSelection[0] = h.Cursor.Loc
+	}
+	if h.Cursor.IsStartOfText() {
+		h.Cursor.Start()
+	} else {
+		h.Cursor.StartOfText()
+	}
+	h.Cursor.SelectTo(h.Cursor.Loc)
+	h.Relocate()
+	return true
+}
+
 
 // SelectToStartOfLine selects to the start of the current line
 func (h *BufPane) SelectToStartOfLine() bool {
@@ -774,7 +804,7 @@ func (h *BufPane) saveBufToFile(filename string, action string, callback func())
 // Find opens a prompt and searches forward for the input
 func (h *BufPane) Find() bool {
 	h.searchOrig = h.Cursor.Loc
-	InfoBar.Prompt("Find: ", "", "Find", func(resp string) {
+	InfoBar.Prompt("Find (regex): ", "", "Find", func(resp string) {
 		// Event callback
 		match, found, _ := h.Buf.FindNext(resp, h.Buf.Start(), h.Buf.End(), h.searchOrig, true, true)
 		if found {
@@ -1120,6 +1150,16 @@ func (h *BufPane) OpenFile() bool {
 	return true
 }
 
+// OpenFile opens a new file in the buffer
+func (h *BufPane) JumpLine() bool {
+	InfoBar.Prompt("> ", "goto ", "Command", nil, func(resp string, canceled bool) {
+		if !canceled {
+			h.HandleCommand(resp)
+		}
+	})
+	return true
+}
+
 // Start moves the viewport to the start of the buffer
 func (h *BufPane) Start() bool {
 	v := h.GetView()
@@ -1407,8 +1447,9 @@ func (h *BufPane) AddTab() bool {
 
 // PreviousTab switches to the previous tab in the tab list
 func (h *BufPane) PreviousTab() bool {
-	a := Tabs.Active()
-	Tabs.SetActive(util.Clamp(a-1, 0, len(Tabs.List)-1))
+	tabsLen := len(Tabs.List)
+	a := Tabs.Active() + tabsLen 
+	Tabs.SetActive((a - 1) % tabsLen)
 
 	return true
 }
@@ -1416,7 +1457,8 @@ func (h *BufPane) PreviousTab() bool {
 // NextTab switches to the next tab in the tab list
 func (h *BufPane) NextTab() bool {
 	a := Tabs.Active()
-	Tabs.SetActive(util.Clamp(a+1, 0, len(Tabs.List)-1))
+	Tabs.SetActive((a + 1) % len(Tabs.List))
+
 	return true
 }
 

@@ -1,8 +1,8 @@
-filetype: python2
+filetype: sage
 
 detect:
-    filename: "\\.py2$"
-    header: "^#!.*/(env +)?python2$"
+    filename: "\\.sage$"
+    header: "^#!.*/(env +)?sage( |$)"
 
 rules:
 
@@ -23,13 +23,13 @@ rules:
       # decorators
     - brightgreen: "@.*[(]"
       # operators
-    - symbol.operator: "([.:;,+*|=!\\%@]|<|>|/|-|&)"
+    - statement: "([.:;,+*|=!\\%@]|<|>|/|-|&)"
       # parentheses
-    - symbol.brackets: "([(){}]|\\[|\\])"
+    - statement: "([(){}]|\\[|\\])"
       # numbers
     - constant.number: "\\b[0-9]+\\b"
 
-    - constant.string:
+    - comment:
         start: "\"\"\""
         end: "\"\"\""
         rules: []
