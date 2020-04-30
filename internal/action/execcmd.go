@@ -121,7 +121,7 @@ func (h *BufPane) ExecCmd(args []string) {
 	b := buffer.NewBufferFromString(text, list[0], buffer.BTLog)
 	e := &qfixPane{
 		BufPane: NewBufPaneFromBuf(b, h.tab),
-		text:    string(buf),
+		text:    text,
 		gocode:  args[0] == "gocode",
 		target:  h,
 	}
@@ -131,6 +131,7 @@ func (h *BufPane) ExecCmd(args []string) {
 	MainTab().Panes = append(MainTab().Panes, e)
 	MainTab().Resize()
 	MainTab().SetActive(len(MainTab().Panes) - 1)
+	e.HandleCommand("goto 0:0")
 }
 
 func (h *qfixPane) HandleEvent(event tcell.Event) {
@@ -140,23 +141,32 @@ func (h *qfixPane) HandleEvent(event tcell.Event) {
 		switch e.Key() {
 		case tcell.KeyRune:
 			h.filter += string(e.Rune())
+			InfoBar.Message("filter: " + h.filter)
 		case tcell.KeyDEL:
 			if len(h.filter) > 0 {
 				h.filter = h.filter[:len(h.filter)-1]
 			}
+			InfoBar.Message("filter: " + h.filter)
 		case tcell.KeyEnter:
 			if h.gocode {
 				h.autocompleteLine()
-			} else {
-				c := h.Cursor
-				line := h.Buf.Line(c.Y)
-				gl := parseGrepLine(line)
-				h.jumpToLine(gl)
+				return
 			}
-			h.Close()
+
+			c := h.Cursor
+			line := strings.TrimSpace(h.Buf.Line(c.Y))
+			if line == "" {
+				return
+			}
+			h.Quit()
+			gl := parseGrepLine(line)
+			h.jumpToLine(gl)
+			InfoBar.Message("")
+			log.Printf("jump: %+v", gl)
 			return
 		case tcell.KeyEsc:
 			h.Quit()
+			InfoBar.Message("")
 			return
 		}
 	}
@@ -239,9 +249,6 @@ func (h *qfixPane) jumpToLine(ln grepLine) {
 
 	bp := Tabs.List[Tabs.Active()].CurPane()
 	bp.Center()
-
-	//	fname:=filepath.Base(ln.Fname)
-	//	InfoBar.Message(fmt.Sprintf("%s:%d:%d: %s", ln.fname, ln.line, ln.pos, ln.message))
 }
 
 type grepLine struct {
