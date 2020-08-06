@@ -21,6 +21,7 @@ type qfixPane struct {
 	filter string
 	text   string
 	gocode bool
+	quit   bool
 	target *BufPane
 }
 
@@ -123,6 +124,7 @@ func (h *BufPane) ExecCmd(args []string) {
 		BufPane: NewBufPaneFromBuf(b, h.tab),
 		text:    text,
 		gocode:  args[0] == "gocode",
+		quit:    args[0] == "gocode" || args[0] == "motion",
 		target:  h,
 	}
 
@@ -158,7 +160,9 @@ func (h *qfixPane) HandleEvent(event tcell.Event) {
 			if line == "" {
 				return
 			}
-			h.Quit()
+			if h.quit {
+				h.Quit()
+			}
 			gl := parseGrepLine(line)
 			h.jumpToLine(gl)
 			InfoBar.Message("")
