@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/zyedidia/micro/internal/buffer"
@@ -61,7 +62,7 @@ func (h *BufPane) ExecCmd(args []string) {
 		InfoBar.Message("usage: exec [-flags] command args...")
 		return
 	}
-	if h.Buf.Modified() {
+	if h != nil && h.Buf != nil && h.Buf.Modified() {
 		saved := h.Save()
 		log.Println("save:", saved)
 	}
@@ -69,31 +70,37 @@ func (h *BufPane) ExecCmd(args []string) {
 	// substitute parameters
 
 	var list []string
-	loc := buffer.Loc{h.Cursor.X, h.Cursor.Y}
-	offs := buffer.ByteOffset(loc, h.Buf)
-	offset := strconv.Itoa(offs)
-	sel := ""
-	word := ""
-	if h.Cursor.HasSelection() {
-		sel = string(h.Cursor.GetSelection())
-	} else {
-		h.Cursor.SelectWord()
-		word = strings.TrimSpace(string(h.Cursor.GetSelection()))
-		h.Cursor.Deselect(true)
-	}
+	var sel string
+	var offset string
+	var word string
+	var line string
+	var pos string
 
-	repl := strings.NewReplacer(
-		"{s}", sel,
-		"{w}", word,
-		"{f}", h.Buf.AbsPath,
-		"{o}", offset,
-	)
+	if h != nil {
+		loc := buffer.Loc{h.Cursor.X, h.Cursor.Y}
+		line = strconv.Itoa(h.Cursor.Y + 1)
+		pos = strconv.Itoa(h.Cursor.X + 1)
+		offs := buffer.ByteOffset(loc, h.Buf)
+		offset = strconv.Itoa(offs)
+		if h.Cursor.HasSelection() {
+			sel = string(h.Cursor.GetSelection())
+		} else {
+			h.Cursor.SelectWord()
+			word = strings.TrimSpace(string(h.Cursor.GetSelection()))
+			h.Cursor.Deselect(true)
+		}
 
-	for _, a := range args {
-		log.Println("arg", a)
-		a = repl.Replace(a)
-		log.Println("expanded arg", a)
-		list = append(list, a)
+		repl := strings.NewReplacer(
+			"{s}", sel,
+			"{w}", word,
+			"{f}", h.Buf.AbsPath,
+			"{o}", offset,
+		)
+
+		for _, a := range args {
+			a = repl.Replace(a)
+			list = append(list, a)
+		}
 	}
 
 	// exec command and get all output
@@ -102,6 +109,8 @@ func (h *BufPane) ExecCmd(args []string) {
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "MICRO_FILE_PATH="+h.Buf.AbsPath)
 	cmd.Env = append(cmd.Env, "MICRO_FILE_OFFSET="+offset)
+	cmd.Env = append(cmd.Env, "MICRO_FILE_LINE="+line)
+	cmd.Env = append(cmd.Env, "MICRO_FILE_POS="+pos)
 	cmd.Env = append(cmd.Env, "MICRO_SELECTION="+sel)
 	cmd.Env = append(cmd.Env, "MICRO_CURR_WORD="+word)
 
@@ -119,20 +128,31 @@ func (h *BufPane) ExecCmd(args []string) {
 		return
 	}
 
-	b := buffer.NewBufferFromString(text, list[0], buffer.BTLog)
-	e := &qfixPane{
-		BufPane: NewBufPaneFromBuf(b, h.tab),
-		text:    text,
-		gocode:  args[0] == "gocode",
-		quit:    args[0] == "gocode" || args[0] == "motion",
-		target:  h,
-	}
+	e := findQfixPane("cmd:" + list[0])
+	if e == nil {
+		b := buffer.NewBufferFromString(text, "cmd:"+list[0], buffer.BTScratch)
+		e = &qfixPane{
+			BufPane: NewBufPaneFromBuf(b, h.tab),
+			text:    text,
+			gocode:  args[0] == "gocode",
+			quit:    args[0] == "gocode" || args[0] == "motion",
+			target:  h,
+		}
 
-	bottom := h.Buf.Settings["splitbottom"].(bool)
-	e.splitID = MainTab().GetNode(h.splitID).HSplit(bottom)
-	MainTab().Panes = append(MainTab().Panes, e)
-	MainTab().Resize()
-	MainTab().SetActive(len(MainTab().Panes) - 1)
+		bottom := true
+		if h != nil {
+			bottom = h.Buf.Settings["splitbottom"].(bool)
+			e.splitID = MainTab().GetNode(h.splitID).HSplit(bottom)
+		} else {
+			e.splitID = MainTab().GetNode(0).HSplit(bottom)
+		}
+		MainTab().Panes = append(MainTab().Panes, e)
+		MainTab().Resize()
+		MainTab().SetActive(len(MainTab().Panes) - 1)
+	} else {
+		loc := buffer.Loc{}
+		e.Buf.Insert(loc, text+"\n=========== "+time.Now().String()+"\n\n")
+	}
 	e.HandleCommand("goto 0:0")
 }
 
@@ -216,6 +236,24 @@ func getLeftChunk(line string, pos int) string {
 	return last
 }
 
+func findQfixPane(fname string) *qfixPane {
+	for i, t := range Tabs.List {
+		log.Printf("tab: %d", t.ID())
+		for j, p := range t.Panes {
+			pane, ok := p.(*qfixPane)
+			log.Printf("pane: %d %s %T", j, p.Name(), p)
+			if !ok || fname != p.Name() {
+				continue
+			}
+			Tabs.SetActive(i)
+			t.SetActive(j)
+			p.SetActive(true)
+			return pane
+		}
+	}
+	return nil
+}
+
 func (h *qfixPane) jumpToLine(ln grepLine) {
 	if _, err := os.Stat(ln.fname); err != nil {
 		return
@@ -228,23 +266,7 @@ func (h *qfixPane) jumpToLine(ln grepLine) {
 	}
 
 	fname, _ := filepath.Abs(ln.fname)
-
-	var foundPane Pane
-
-	for i, t := range Tabs.List {
-		for j, p := range t.Panes {
-			bp, ok := p.(*BufPane)
-			if !ok || fname != bp.Buf.AbsPath {
-				continue
-			}
-			Tabs.SetActive(i)
-			t.SetActive(j)
-			bp.SetActive(true)
-			foundPane = t.CurPane()
-			break
-		}
-	}
-
+	foundPane := findQfixPane(fname)
 	if foundPane != nil {
 		foundPane.HandleCommand(fmt.Sprintf("goto %d:%d", ln.line, ln.pos))
 	} else {
