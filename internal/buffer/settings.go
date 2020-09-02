@@ -1,8 +1,8 @@
 package buffer
 
 import (
-	"github.com/zyedidia/micro/internal/config"
-	"github.com/zyedidia/micro/internal/screen"
+	"github.com/zyedidia/micro/v2/internal/config"
+	"github.com/zyedidia/micro/v2/internal/screen"
 )
 
 func (b *Buffer) SetOptionNative(option string, nativeValue interface{}) error {
@@ -10,9 +10,11 @@ func (b *Buffer) SetOptionNative(option string, nativeValue interface{}) error {
 
 	if option == "fastdirty" {
 		if !nativeValue.(bool) {
-			e := calcHash(b, &b.origHash)
-			if e == ErrFileTooLarge {
-				b.Settings["fastdirty"] = false
+			if !b.Modified() {
+				e := calcHash(b, &b.origHash)
+				if e == ErrFileTooLarge {
+					b.Settings["fastdirty"] = false
+				}
 			}
 		}
 	} else if option == "statusline" {

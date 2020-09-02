@@ -1,12 +1,11 @@
 package display
 
 import (
-	"unicode/utf8"
-
-	"github.com/zyedidia/micro/internal/buffer"
-	"github.com/zyedidia/micro/internal/config"
-	"github.com/zyedidia/micro/internal/screen"
-	"github.com/zyedidia/micro/internal/shell"
+	"github.com/zyedidia/micro/v2/internal/buffer"
+	"github.com/zyedidia/micro/v2/internal/config"
+	"github.com/zyedidia/micro/v2/internal/screen"
+	"github.com/zyedidia/micro/v2/internal/shell"
+	"github.com/zyedidia/micro/v2/internal/util"
 	"github.com/zyedidia/tcell"
 	"github.com/zyedidia/terminal"
 )
@@ -98,12 +97,12 @@ func (w *TermWindow) Display() {
 		}
 
 		text := []byte(w.Name())
-		textLen := utf8.RuneCount(text)
+		textLen := util.CharacterCount(text)
 		for x := 0; x < w.Width; x++ {
 			if x < textLen {
-				r, size := utf8.DecodeRune(text)
+				r, combc, size := util.DecodeCharacter(text)
 				text = text[size:]
-				screen.SetContent(w.X+x, w.Y+w.Height, r, nil, statusLineStyle)
+				screen.SetContent(w.X+x, w.Y+w.Height, r, combc, statusLineStyle)
 			} else {
 				screen.SetContent(w.X+x, w.Y+w.Height, ' ', nil, statusLineStyle)
 			}

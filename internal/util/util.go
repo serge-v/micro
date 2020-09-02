@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/blang/semver"
 	runewidth "github.com/mattn/go-runewidth"
@@ -64,7 +63,7 @@ func SliceEnd(slc []byte, index int) []byte {
 			return slc[totalSize:]
 		}
 
-		_, size := utf8.DecodeRune(slc[totalSize:])
+		_, _, size := DecodeCharacter(slc[totalSize:])
 		totalSize += size
 		i++
 	}
@@ -82,7 +81,7 @@ func SliceEndStr(str string, index int) string {
 			return str[totalSize:]
 		}
 
-		_, size := utf8.DecodeRuneInString(str[totalSize:])
+		_, _, size := DecodeCharacterInString(str[totalSize:])
 		totalSize += size
 		i++
 	}
@@ -101,7 +100,7 @@ func SliceStart(slc []byte, index int) []byte {
 			return slc[:totalSize]
 		}
 
-		_, size := utf8.DecodeRune(slc[totalSize:])
+		_, _, size := DecodeCharacter(slc[totalSize:])
 		totalSize += size
 		i++
 	}
@@ -119,7 +118,7 @@ func SliceStartStr(str string, index int) string {
 			return str[:totalSize]
 		}
 
-		_, size := utf8.DecodeRuneInString(str[totalSize:])
+		_, _, size := DecodeCharacterInString(str[totalSize:])
 		totalSize += size
 		i++
 	}
@@ -135,7 +134,7 @@ func SliceVisualEnd(b []byte, n, tabsize int) ([]byte, int, int) {
 	width := 0
 	i := 0
 	for len(b) > 0 {
-		r, size := utf8.DecodeRune(b)
+		r, _, size := DecodeCharacter(b)
 
 		w := 0
 		switch r {
@@ -172,7 +171,7 @@ func StringWidth(b []byte, n, tabsize int) int {
 	i := 0
 	width := 0
 	for len(b) > 0 {
-		r, size := utf8.DecodeRune(b)
+		r, _, size := DecodeCharacter(b)
 		b = b[size:]
 
 		switch r {
@@ -265,7 +264,7 @@ func IsBytesWhitespace(b []byte) bool {
 // RunePos returns the rune index of a given byte index
 // Make sure the byte index is not between code points
 func RunePos(b []byte, i int) int {
-	return utf8.RuneCount(b[:i])
+	return CharacterCount(b[:i])
 }
 
 // MakeRelative will attempt to make a relative path between path and base
@@ -337,6 +336,10 @@ func GetModTime(path string) (time.Time, error) {
 // EscapePath replaces every path separator in a given path with a %
 func EscapePath(path string) string {
 	path = filepath.ToSlash(path)
+	if runtime.GOOS == "windows" {
+		// ':' is not valid in a path name on Windows but is ok on Unix
+		path = strings.Replace(path, ":", "%", -1)
+	}
 	return strings.Replace(path, "/", "%", -1)
 }
 
@@ -344,7 +347,7 @@ func EscapePath(path string) string {
 func GetLeadingWhitespace(b []byte) []byte {
 	ws := []byte{}
 	for len(b) > 0 {
-		r, size := utf8.DecodeRune(b)
+		r, _, size := DecodeCharacter(b)
 		if r == ' ' || r == '\t' {
 			ws = append(ws, byte(r))
 		} else {
@@ -370,7 +373,7 @@ func GetCharPosInLine(b []byte, visualPos int, tabsize int) int {
 	i := 0     // char pos
 	width := 0 // string visual width
 	for len(b) > 0 {
-		r, size := utf8.DecodeRune(b)
+		r, _, size := DecodeCharacter(b)
 		b = b[size:]
 
 		switch r {
@@ -416,7 +419,11 @@ func Clamp(val, min, max int) int {
 }
 
 func IsNonAlphaNumeric(c rune) bool {
-	return !unicode.IsLetter(c) && !unicode.IsNumber(c)
+	return !unicode.IsLetter(c) && !unicode.IsNumber(c) && c != '_'
+}
+
+func IsAutocomplete(c rune) bool {
+	return c == '.' || !IsNonAlphaNumeric(c)
 }
 
 func ParseSpecial(s string) string {

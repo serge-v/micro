@@ -12,8 +12,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/zyedidia/micro/internal/buffer"
-	"github.com/zyedidia/micro/internal/util"
+	"github.com/zyedidia/micro/v2/internal/buffer"
+	"github.com/zyedidia/micro/v2/internal/util"
 	"github.com/zyedidia/tcell"
 )
 

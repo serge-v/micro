@@ -1,12 +1,12 @@
 package screen
 
 import (
-	"fmt"
+	"errors"
 	"os"
 	"sync"
 
-	"github.com/zyedidia/micro/internal/config"
-	"github.com/zyedidia/micro/internal/util"
+	"github.com/zyedidia/micro/v2/internal/config"
+	"github.com/zyedidia/micro/v2/internal/util"
 	"github.com/zyedidia/tcell"
 )
 
@@ -17,6 +17,9 @@ import (
 // screen. TODO: maybe we should worry about polling and drawing at the
 // same time too.
 var Screen tcell.Screen
+
+// Events is the channel of tcell events
+var Events chan (tcell.Event)
 
 // The lock is necessary since the screen is polled on a separate thread
 var lock sync.Mutex
@@ -97,6 +100,10 @@ func ShowCursor(x, y int) {
 // SetContent sets a cell at a point on the screen and makes sure that it is
 // synced with the last cursor location
 func SetContent(x, y int, mainc rune, combc []rune, style tcell.Style) {
+	if !Screen.CanDisplay(mainc, true) {
+		mainc = '�'
+	}
+
 	Screen.SetContent(x, y, mainc, combc, style)
 	if util.FakeCursor && lastCursor.x == x && lastCursor.y == y {
 		lastCursor.r = mainc
@@ -126,8 +133,8 @@ func TempStart(screenWasNil bool) {
 }
 
 // Init creates and initializes the tcell screen
-func Init() {
-	drawChan = make(chan bool)
+func Init() error {
+	drawChan = make(chan bool, 8)
 
 	// Should we enable true color?
 	truecolor := os.Getenv("MICRO_TRUECOLOR") == "1"
@@ -146,14 +153,13 @@ func Init() {
 	var err error
 	Screen, err = tcell.NewScreen()
 	if err != nil {
-		fmt.Println(err)
-		fmt.Println("Fatal: Micro could not initialize a Screen.")
-		os.Exit(1)
+		return err
 	}
 	if err = Screen.Init(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
+
+	Screen.SetPaste(config.GetGlobalOption("paste").(bool))
 
 	// restore TERM
 	if config.GetGlobalOption("xterm").(bool) {
@@ -163,4 +169,30 @@ func Init() {
 	if config.GetGlobalOption("mouse").(bool) {
 		Screen.EnableMouse()
 	}
+
+	return nil
+}
+
+// InitSimScreen initializes a simulation screen for testing purposes
+func InitSimScreen() (tcell.SimulationScreen, error) {
+	drawChan = make(chan bool, 8)
+
+	// Initilize tcell
+	var err error
+	s := tcell.NewSimulationScreen("")
+	if s == nil {
+		return nil, errors.New("Failed to get a simulation screen")
+	}
+	if err = s.Init(); err != nil {
+		return nil, err
+	}
+
+	s.SetSize(80, 24)
+	Screen = s
+
+	if config.GetGlobalOption("mouse").(bool) {
+		Screen.EnableMouse()
+	}
+
+	return s, nil
 }

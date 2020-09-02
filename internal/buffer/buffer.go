@@ -15,16 +15,15 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	luar "layeh.com/gopher-luar"
 
 	dmp "github.com/sergi/go-diff/diffmatchpatch"
-	"github.com/zyedidia/micro/internal/config"
-	ulua "github.com/zyedidia/micro/internal/lua"
-	"github.com/zyedidia/micro/internal/screen"
-	"github.com/zyedidia/micro/internal/util"
-	"github.com/zyedidia/micro/pkg/highlight"
+	"github.com/zyedidia/micro/v2/internal/config"
+	ulua "github.com/zyedidia/micro/v2/internal/lua"
+	"github.com/zyedidia/micro/v2/internal/screen"
+	"github.com/zyedidia/micro/v2/internal/util"
+	"github.com/zyedidia/micro/v2/pkg/highlight"
 	"golang.org/x/text/encoding/htmlindex"
 	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/transform"
@@ -103,9 +102,7 @@ type SharedBuffer struct {
 	diffLock          sync.RWMutex
 	diff              map[int]DiffStatus
 
-	// counts the number of edits
-	// resets every backupTime edits
-	lastbackup time.Time
+	requestedBackup bool
 
 	// ReloadDisabled allows the user to disable reloads if they
 	// are viewing a file that is constantly changing
@@ -152,14 +149,14 @@ func (b *SharedBuffer) MarkModified(start, end int) {
 		return
 	}
 
-	start = util.Clamp(start, 0, len(b.lines))
-	end = util.Clamp(end, 0, len(b.lines))
+	start = util.Clamp(start, 0, len(b.lines)-1)
+	end = util.Clamp(end, 0, len(b.lines)-1)
 
 	l := -1
 	for i := start; i <= end; i++ {
 		l = util.Max(b.Highlighter.ReHighlightStates(b, i), l)
 	}
-	b.Highlighter.HighlightMatches(b, start, l+1)
+	b.Highlighter.HighlightMatches(b, start, l)
 }
 
 // DisableReload disables future reloads of this sharedbuffer
@@ -192,13 +189,22 @@ type Buffer struct {
 	StartCursor Loc
 }
 
-// NewBufferFromFile opens a new buffer using the given path
-// It will also automatically handle `~`, and line/column with filename:l:c
-// It will return an empty buffer if the path does not exist
-// and an error if the file is a directory
-func NewBufferFromFile(path string, btype BufType) (*Buffer, error) {
+// NewBufferFromFileAtLoc opens a new buffer with a given cursor location
+// If cursorLoc is {-1, -1} the location does not overwrite what the cursor location
+// would otherwise be (start of file, or saved cursor position if `savecursor` is
+// enabled)
+func NewBufferFromFileAtLoc(path string, btype BufType, cursorLoc Loc) (*Buffer, error) {
 	var err error
-	filename, cursorPos := util.GetPathAndCursorPosition(path)
+	filename := path
+	if config.GetGlobalOption("parsecursor").(bool) && cursorLoc.X == -1 && cursorLoc.Y == -1 {
+		var cursorPos []string
+		filename, cursorPos = util.GetPathAndCursorPosition(filename)
+		cursorLoc, err = ParseCursorLocation(cursorPos)
+		if err != nil {
+			cursorLoc = Loc{-1, -1}
+		}
+	}
+
 	filename, err = util.ReplaceHome(filename)
 	if err != nil {
 		return nil, err
@@ -213,11 +219,6 @@ func NewBufferFromFile(path string, btype BufType) (*Buffer, error) {
 
 	defer file.Close()
 
-	cursorLoc, cursorerr := ParseCursorLocation(cursorPos)
-	if cursorerr != nil {
-		cursorLoc = Loc{-1, -1}
-	}
-
 	var buf *Buffer
 	if err != nil {
 		// File does not exist -- create an empty buffer with that name
@@ -227,6 +228,19 @@ func NewBufferFromFile(path string, btype BufType) (*Buffer, error) {
 	}
 
 	return buf, nil
+}
+
+// NewBufferFromFile opens a new buffer using the given path
+// It will also automatically handle `~`, and line/column with filename:l:c
+// It will return an empty buffer if the path does not exist
+// and an error if the file is a directory
+func NewBufferFromFile(path string, btype BufType) (*Buffer, error) {
+	return NewBufferFromFileAtLoc(path, btype, Loc{-1, -1})
+}
+
+// NewBufferFromStringAtLoc creates a new buffer containing the given string with a cursor loc
+func NewBufferFromStringAtLoc(text, path string, btype BufType, cursorLoc Loc) *Buffer {
+	return NewBuffer(strings.NewReader(text), int64(len(text)), path, cursorLoc, btype)
 }
 
 // NewBufferFromString creates a new buffer containing the given string
@@ -255,6 +269,7 @@ func NewBuffer(r io.Reader, size int64, path string, startcursor Loc, btype BufT
 		}
 	}
 
+	hasBackup := false
 	if !found {
 		b.SharedBuffer = new(SharedBuffer)
 		b.Type = btype
@@ -277,11 +292,25 @@ func NewBuffer(r io.Reader, size int64, path string, startcursor Loc, btype BufT
 			b.Settings["encoding"] = "utf-8"
 		}
 
-		hasBackup := b.ApplyBackup(size)
+		hasBackup = b.ApplyBackup(size)
 
 		if !hasBackup {
 			reader := bufio.NewReader(transform.NewReader(r, enc.NewDecoder()))
-			b.LineArray = NewLineArray(uint64(size), FFAuto, reader)
+
+			var ff FileFormat = FFAuto
+
+			if size == 0 {
+				// for empty files, use the fileformat setting instead of
+				// autodetection
+				switch b.Settings["fileformat"] {
+				case "unix":
+					ff = FFUnix
+				case "dos":
+					ff = FFDos
+				}
+			}
+
+			b.LineArray = NewLineArray(uint64(size), ff, reader)
 		}
 		b.EventHandler = NewEventHandler(b.SharedBuffer, b.cursors)
 
@@ -326,7 +355,9 @@ func NewBuffer(r io.Reader, size int64, path string, startcursor Loc, btype BufT
 		if size > LargeFileThreshold {
 			// If the file is larger than LargeFileThreshold fastdirty needs to be on
 			b.Settings["fastdirty"] = true
-		} else {
+		} else if !hasBackup {
+			// since applying a backup does not save the applied backup to disk, we should
+			// not calculate the original hash based on the backup data
 			calcHash(b, &b.origHash)
 		}
 	}
@@ -395,7 +426,7 @@ func (b *Buffer) Insert(start Loc, text string) {
 		b.EventHandler.active = b.curCursor
 		b.EventHandler.Insert(start, text)
 
-		go b.Backup(true)
+		b.RequestBackup()
 	}
 }
 
@@ -406,7 +437,7 @@ func (b *Buffer) Remove(start, end Loc) {
 		b.EventHandler.active = b.curCursor
 		b.EventHandler.Remove(start, end)
 
-		go b.Backup(true)
+		b.RequestBackup()
 	}
 }
 
@@ -474,7 +505,7 @@ func (b *Buffer) RuneAt(loc Loc) rune {
 	if len(line) > 0 {
 		i := 0
 		for len(line) > 0 {
-			r, size := utf8.DecodeRune(line)
+			r, _, size := util.DecodeCharacter(line)
 			line = line[size:]
 			i++
 
@@ -501,6 +532,22 @@ func (b *Buffer) Modified() bool {
 
 	calcHash(b, &buff)
 	return buff != b.origHash
+}
+
+// Size returns the number of bytes in the current buffer
+func (b *Buffer) Size() int {
+	nb := 0
+	for i := 0; i < b.LinesNum(); i++ {
+		nb += len(b.LineBytes(i))
+
+		if i != b.LinesNum()-1 {
+			if b.Endings == FFDos {
+				nb++ // carriage return
+			}
+			nb++ // newline
+		}
+	}
+	return nb
 }
 
 // calcHash calculates md5 hash of all lines in the buffer
@@ -807,19 +854,18 @@ func (b *Buffer) MoveLinesUp(start int, end int) {
 	}
 	l := string(b.LineBytes(start - 1))
 	if end == len(b.lines) {
-		b.Insert(
+		b.insert(
 			Loc{
-				utf8.RuneCount(b.lines[end-1].data),
+				util.CharacterCount(b.lines[end-1].data),
 				end - 1,
 			},
-			"\n"+l,
-		)
-	} else {
-		b.Insert(
-			Loc{0, end},
-			l+"\n",
+			[]byte{'\n'},
 		)
 	}
+	b.Insert(
+		Loc{0, end},
+		l+"\n",
+	)
 	b.Remove(
 		Loc{0, start - 1},
 		Loc{0, start},
@@ -828,7 +874,7 @@ func (b *Buffer) MoveLinesUp(start int, end int) {
 
 // MoveLinesDown moves the range of lines down one row
 func (b *Buffer) MoveLinesDown(start int, end int) {
-	if start < 0 || start >= end || end >= len(b.lines)-1 {
+	if start < 0 || start >= end || end >= len(b.lines) {
 		return
 	}
 	l := string(b.LineBytes(end))

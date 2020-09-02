@@ -5,9 +5,9 @@ import (
 	"bytes"
 	"io"
 	"sync"
-	"unicode/utf8"
 
-	"github.com/zyedidia/micro/pkg/highlight"
+	"github.com/zyedidia/micro/v2/internal/util"
+	"github.com/zyedidia/micro/v2/pkg/highlight"
 )
 
 // Finds the byte index of the nth rune in a byte slice
@@ -19,7 +19,7 @@ func runeToByteIndex(n int, txt []byte) int {
 	count := 0
 	i := 0
 	for len(txt) > 0 {
-		_, size := utf8.DecodeRune(txt)
+		_, _, size := util.DecodeCharacter(txt)
 
 		txt = txt[size:]
 		count += size
@@ -86,6 +86,8 @@ func NewLineArray(size uint64, endings FileFormat, reader io.Reader) *LineArray 
 
 	br := bufio.NewReader(reader)
 	var loaded int
+
+	la.Endings = endings
 
 	n := 0
 	for {
@@ -189,10 +191,15 @@ func (la *LineArray) newlineBelow(y int) {
 func (la *LineArray) insert(pos Loc, value []byte) {
 	x, y := runeToByteIndex(pos.X, la.lines[pos.Y].data), pos.Y
 	for i := 0; i < len(value); i++ {
-		if value[i] == '\n' {
+		if value[i] == '\n' || (value[i] == '\r' && i < len(value)-1 && value[i+1] == '\n') {
 			la.split(Loc{x, y})
 			x = 0
 			y++
+
+			if value[i] == '\r' {
+				i++
+			}
+
 			continue
 		}
 		la.insertByte(Loc{x, y}, value[i])
@@ -299,7 +306,7 @@ func (la *LineArray) Start() Loc {
 // End returns the location of the last character in the buffer
 func (la *LineArray) End() Loc {
 	numlines := len(la.lines)
-	return Loc{utf8.RuneCount(la.lines[numlines-1].data), numlines - 1}
+	return Loc{util.CharacterCount(la.lines[numlines-1].data), numlines - 1}
 }
 
 // LineBytes returns line n as an array of bytes

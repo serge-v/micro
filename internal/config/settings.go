@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -12,7 +13,7 @@ import (
 
 	"github.com/zyedidia/glob"
 	"github.com/zyedidia/json5"
-	"github.com/zyedidia/micro/internal/util"
+	"github.com/zyedidia/micro/v2/internal/util"
 	"golang.org/x/text/encoding/htmlindex"
 )
 
@@ -26,16 +27,23 @@ var (
 	GlobalSettings map[string]interface{}
 
 	// This is the raw parsed json
-	parsedSettings map[string]interface{}
+	parsedSettings     map[string]interface{}
+	settingsParseError bool
+
+	// ModifiedSettings is a map of settings which should be written to disk
+	// because they have been modified by the user in this session
+	ModifiedSettings map[string]bool
 )
 
 func init() {
+	ModifiedSettings = make(map[string]bool)
 	parsedSettings = make(map[string]interface{})
 }
 
 // Options with validators
 var optionValidators = map[string]optionValidator{
 	"autosave":     validateNonNegativeValue,
+	"clipboard":    validateClipboard,
 	"tabsize":      validatePositiveValue,
 	"scrollmargin": validateNonNegativeValue,
 	"scrollspeed":  validateNonNegativeValue,
@@ -50,12 +58,14 @@ func ReadSettings() error {
 	if _, e := os.Stat(filename); e == nil {
 		input, err := ioutil.ReadFile(filename)
 		if err != nil {
+			settingsParseError = true
 			return errors.New("Error reading settings.json file: " + err.Error())
 		}
 		if !strings.HasPrefix(string(input), "null") {
 			// Unmarshal the input into the parsed map
 			err = json5.Unmarshal(input, &parsedSettings)
 			if err != nil {
+				settingsParseError = true
 				return errors.New("Error reading settings.json: " + err.Error())
 			}
 
@@ -75,16 +85,33 @@ func ReadSettings() error {
 	return nil
 }
 
+func verifySetting(option string, value reflect.Type, def reflect.Type) bool {
+	var interfaceArr []interface{}
+	switch option {
+	case "pluginrepos", "pluginchannels":
+		return value.AssignableTo(reflect.TypeOf(interfaceArr))
+	default:
+		return def.AssignableTo(value)
+	}
+}
+
 // InitGlobalSettings initializes the options map and sets all options to their default values
 // Must be called after ReadSettings
-func InitGlobalSettings() {
+func InitGlobalSettings() error {
+	var err error
 	GlobalSettings = DefaultGlobalSettings()
 
 	for k, v := range parsedSettings {
 		if !strings.HasPrefix(reflect.TypeOf(v).String(), "map") {
+			if _, ok := GlobalSettings[k]; ok && !verifySetting(k, reflect.TypeOf(v), reflect.TypeOf(GlobalSettings[k])) {
+				err = errors.New(fmt.Sprintf("Global Error: setting '%s' has incorrect type (%s), using default value: %v (%s)", k, reflect.TypeOf(v), GlobalSettings[k], reflect.TypeOf(GlobalSettings[k])))
+				continue
+			}
+
 			GlobalSettings[k] = v
 		}
 	}
+	return err
 }
 
 // InitLocalSettings scans the json in settings.json and sets the options locally based
@@ -97,6 +124,10 @@ func InitLocalSettings(settings map[string]interface{}, path string) error {
 			if strings.HasPrefix(k, "ft:") {
 				if settings["filetype"].(string) == k[3:] {
 					for k1, v1 := range v.(map[string]interface{}) {
+						if _, ok := settings[k1]; ok && !verifySetting(k1, reflect.TypeOf(v1), reflect.TypeOf(settings[k1])) {
+							parseError = errors.New(fmt.Sprintf("Error: setting '%s' has incorrect type (%s), using default value: %v (%s)", k, reflect.TypeOf(v1), settings[k1], reflect.TypeOf(settings[k1])))
+							continue
+						}
 						settings[k1] = v1
 					}
 				}
@@ -109,6 +140,10 @@ func InitLocalSettings(settings map[string]interface{}, path string) error {
 
 				if g.MatchString(path) {
 					for k1, v1 := range v.(map[string]interface{}) {
+						if _, ok := settings[k1]; ok && !verifySetting(k1, reflect.TypeOf(v1), reflect.TypeOf(settings[k1])) {
+							parseError = errors.New(fmt.Sprintf("Error: setting '%s' has incorrect type (%s), using default value: %v (%s)", k, reflect.TypeOf(v1), settings[k1], reflect.TypeOf(settings[k1])))
+							continue
+						}
 						settings[k1] = v1
 					}
 				}
@@ -120,10 +155,35 @@ func InitLocalSettings(settings map[string]interface{}, path string) error {
 
 // WriteSettings writes the settings to the specified filename as JSON
 func WriteSettings(filename string) error {
+	if settingsParseError {
+		// Don't write settings if there was a parse error
+		// because this will delete the settings.json if it
+		// is invalid. Instead we should allow the user to fix
+		// it manually.
+		return nil
+	}
+
 	var err error
 	if _, e := os.Stat(ConfigDir); e == nil {
+		defaults := DefaultGlobalSettings()
+
+		// remove any options froms parsedSettings that have since been marked as default
+		for k, v := range parsedSettings {
+			if !strings.HasPrefix(reflect.TypeOf(v).String(), "map") {
+				cur, okcur := GlobalSettings[k]
+				if def, ok := defaults[k]; ok && okcur && reflect.DeepEqual(cur, def) {
+					delete(parsedSettings, k)
+				}
+			}
+		}
+
+		// add any options to parsedSettings that have since been marked as non-default
 		for k, v := range GlobalSettings {
-			parsedSettings[k] = v
+			if def, ok := defaults[k]; !ok || !reflect.DeepEqual(v, def) {
+				if _, wr := ModifiedSettings[k]; wr {
+					parsedSettings[k] = v
+				}
+			}
 		}
 
 		txt, _ := json.MarshalIndent(parsedSettings, "", "    ")
@@ -132,10 +192,23 @@ func WriteSettings(filename string) error {
 	return err
 }
 
+// OverwriteSettings writes the current settings to settings.json and
+// resets any user configuration of local settings present in settings.json
 func OverwriteSettings(filename string) error {
+	settings := make(map[string]interface{})
+
 	var err error
 	if _, e := os.Stat(ConfigDir); e == nil {
-		txt, _ := json.MarshalIndent(GlobalSettings, "", "    ")
+		defaults := DefaultGlobalSettings()
+		for k, v := range GlobalSettings {
+			if def, ok := defaults[k]; !ok || !reflect.DeepEqual(v, def) {
+				if _, wr := ModifiedSettings[k]; wr {
+					settings[k] = v
+				}
+			}
+		}
+
+		txt, _ := json.MarshalIndent(settings, "", "    ")
 		err = ioutil.WriteFile(filename, append(txt, '\n'), 0644)
 	}
 	return err
@@ -144,7 +217,7 @@ func OverwriteSettings(filename string) error {
 // RegisterCommonOptionPlug creates a new option (called pl.name). This is meant to be called by plugins to add options.
 func RegisterCommonOptionPlug(pl string, name string, defaultvalue interface{}) error {
 	name = pl + "." + name
-	if v, ok := GlobalSettings[name]; !ok {
+	if _, ok := GlobalSettings[name]; !ok {
 		defaultCommonSettings[name] = defaultvalue
 		GlobalSettings[name] = defaultvalue
 		err := WriteSettings(filepath.Join(ConfigDir, "settings.json"))
@@ -152,7 +225,7 @@ func RegisterCommonOptionPlug(pl string, name string, defaultvalue interface{}) 
 			return errors.New("Error writing settings.json file: " + err.Error())
 		}
 	} else {
-		defaultCommonSettings[name] = v
+		defaultCommonSettings[name] = defaultvalue
 	}
 	return nil
 }
@@ -186,6 +259,7 @@ var defaultCommonSettings = map[string]interface{}{
 	"autoindent":     true,
 	"autosu":         false,
 	"backup":         true,
+	"backupdir":      "",
 	"basename":       false,
 	"colorcolumn":    float64(0),
 	"cursorline":     true,
@@ -200,9 +274,11 @@ var defaultCommonSettings = map[string]interface{}{
 	"keepautoindent": false,
 	"matchbrace":     true,
 	"mkparents":      false,
+	"permbackup":     false,
 	"readonly":       false,
 	"rmtrailingws":   false,
 	"ruler":          true,
+	"relativeruler":  false,
 	"savecursor":     false,
 	"saveundo":       false,
 	"scrollbar":      false,
@@ -247,10 +323,14 @@ func DefaultCommonSettings() map[string]interface{} {
 // default values
 var DefaultGlobalOnlySettings = map[string]interface{}{
 	"autosave":       float64(0),
+	"clipboard":      "external",
 	"colorscheme":    "default",
+	"divchars":       "|-",
+	"divreverse":     true,
 	"infobar":        true,
 	"keymenu":        false,
 	"mouse":          true,
+	"parsecursor":    false,
 	"paste":          false,
 	"savehistory":    true,
 	"sucmd":          "sudo",
@@ -367,6 +447,22 @@ func validateColorscheme(option string, value interface{}) error {
 
 	if !ColorschemeExists(colorscheme) {
 		return errors.New(colorscheme + " is not a valid colorscheme")
+	}
+
+	return nil
+}
+
+func validateClipboard(option string, value interface{}) error {
+	val, ok := value.(string)
+
+	if !ok {
+		return errors.New("Expected string type for clipboard")
+	}
+
+	switch val {
+	case "internal", "external", "terminal":
+	default:
+		return errors.New(option + " must be 'internal', 'external', or 'terminal'")
 	}
 
 	return nil

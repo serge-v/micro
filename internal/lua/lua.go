@@ -15,14 +15,17 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
+	humanize "github.com/dustin/go-humanize"
 	lua "github.com/yuin/gopher-lua"
 	luar "layeh.com/gopher-luar"
 )
 
 var L *lua.LState
+var Lock sync.Mutex
 
 // LoadFile loads a lua file
 func LoadFile(module string, file string, data []byte) error {
@@ -69,6 +72,8 @@ func Import(pkg string) *lua.LTable {
 		return importTime()
 	case "unicode/utf8", "utf8":
 		return importUtf8()
+	case "humanize":
+		return importHumanize()
 	default:
 		return nil
 	}
@@ -553,6 +558,15 @@ func importUtf8() *lua.LTable {
 	L.SetField(pkg, "Valid", luar.New(L, utf8.Valid))
 	L.SetField(pkg, "ValidRune", luar.New(L, utf8.ValidRune))
 	L.SetField(pkg, "ValidString", luar.New(L, utf8.ValidString))
+
+	return pkg
+}
+
+func importHumanize() *lua.LTable {
+	pkg := L.NewTable()
+
+	L.SetField(pkg, "Bytes", luar.New(L, humanize.Bytes))
+	L.SetField(pkg, "Ordinal", luar.New(L, humanize.Ordinal))
 
 	return pkg
 }

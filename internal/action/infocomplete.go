@@ -5,9 +5,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/zyedidia/micro/internal/buffer"
-	"github.com/zyedidia/micro/internal/config"
-	"github.com/zyedidia/micro/internal/util"
+	"github.com/zyedidia/micro/v2/internal/buffer"
+	"github.com/zyedidia/micro/v2/internal/config"
+	"github.com/zyedidia/micro/v2/internal/util"
 )
 
 // This file is meant (for now) for autocompletion in command mode, not
@@ -185,6 +185,16 @@ func OptionValueComplete(b *buffer.Buffer) ([]string, []string) {
 			}
 			if strings.HasPrefix("doas", input) {
 				suggestions = append(suggestions, "doas")
+			}
+		case "clipboard":
+			if strings.HasPrefix("external", input) {
+				suggestions = append(suggestions, "external")
+			}
+			if strings.HasPrefix("internal", input) {
+				suggestions = append(suggestions, "internal")
+			}
+			if strings.HasPrefix("terminal", input) {
+				suggestions = append(suggestions, "terminal")
 			}
 		}
 	}

@@ -6,6 +6,9 @@ mkdir -p micro-$1
 cp LICENSE micro-$1
 cp README.md micro-$1
 cp LICENSE-THIRD-PARTY micro-$1
+cp assets/packaging/micro.1 micro-$1
+cp assets/packaging/micro.desktop micro-$1
+cp assets/micro-logo-mark.svg micro-$1/micro.svg
 
 HASH="$(git rev-parse --short HEAD)"
 VERSION="$(go run tools/build-version.go)"
@@ -22,6 +25,9 @@ mv micro-$1-osx.tar.gz binaries
 # Linux
 echo "Linux 64"
 GOOS=linux GOARCH=amd64 make build
+./tools/package-deb.sh $1
+mv micro-$1-amd64.deb binaries
+
 mv micro micro-$1
 tar -czf micro-$1-linux64.tar.gz micro-$1
 mv micro-$1-linux64.tar.gz binaries

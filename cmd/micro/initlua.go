@@ -6,14 +6,14 @@ import (
 	lua "github.com/yuin/gopher-lua"
 	luar "layeh.com/gopher-luar"
 
-	"github.com/zyedidia/micro/internal/action"
-	"github.com/zyedidia/micro/internal/buffer"
-	"github.com/zyedidia/micro/internal/config"
-	"github.com/zyedidia/micro/internal/display"
-	ulua "github.com/zyedidia/micro/internal/lua"
-	"github.com/zyedidia/micro/internal/screen"
-	"github.com/zyedidia/micro/internal/shell"
-	"github.com/zyedidia/micro/internal/util"
+	"github.com/zyedidia/micro/v2/internal/action"
+	"github.com/zyedidia/micro/v2/internal/buffer"
+	"github.com/zyedidia/micro/v2/internal/config"
+	"github.com/zyedidia/micro/v2/internal/display"
+	ulua "github.com/zyedidia/micro/v2/internal/lua"
+	"github.com/zyedidia/micro/v2/internal/screen"
+	"github.com/zyedidia/micro/v2/internal/shell"
+	"github.com/zyedidia/micro/v2/internal/util"
 )
 
 func init() {
@@ -53,6 +53,10 @@ func luaImportMicro() *lua.LTable {
 	ulua.L.SetField(pkg, "CurTab", luar.New(ulua.L, func() *action.Tab {
 		return action.MainTab()
 	}))
+	ulua.L.SetField(pkg, "Tabs", luar.New(ulua.L, func() *action.TabList {
+		return action.Tabs
+	}))
+	ulua.L.SetField(pkg, "Lock", luar.New(ulua.L, ulua.Lock))
 
 	return pkg
 }
@@ -83,6 +87,7 @@ func luaImportMicroConfig() *lua.LTable {
 	ulua.L.SetField(pkg, "GetGlobalOption", luar.New(ulua.L, config.GetGlobalOption))
 	ulua.L.SetField(pkg, "SetGlobalOption", luar.New(ulua.L, action.SetGlobalOption))
 	ulua.L.SetField(pkg, "SetGlobalOptionNative", luar.New(ulua.L, action.SetGlobalOptionNative))
+	ulua.L.SetField(pkg, "ConfigDir", luar.New(ulua.L, config.ConfigDir))
 
 	return pkg
 }
@@ -141,6 +146,7 @@ func luaImportMicroUtil() *lua.LTable {
 	ulua.L.SetField(pkg, "GetLeadingWhitespace", luar.New(ulua.L, util.LuaGetLeadingWhitespace))
 	ulua.L.SetField(pkg, "IsWordChar", luar.New(ulua.L, util.LuaIsWordChar))
 	ulua.L.SetField(pkg, "String", luar.New(ulua.L, util.String))
+	ulua.L.SetField(pkg, "CharacterCountInString", luar.New(ulua.L, util.CharacterCountInString))
 	ulua.L.SetField(pkg, "RuneStr", luar.New(ulua.L, func(r rune) string {
 		return string(r)
 	}))

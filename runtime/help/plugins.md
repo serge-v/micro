@@ -43,6 +43,12 @@ are called when certain events happen. Here is the list of callbacks
 which micro defines:
 
 * `init()`: this function should be used for your plugin initialization.
+   This function is called after buffers have been initialized.
+
+* `preinit()`: initialization function called before buffers have been
+   initialized.
+
+* `postinit()`: initialization function called after `init()`.
 
 * `onBufferOpen(buf)`: runs when a buffer is opened. The input contains
    the buffer object.
@@ -358,6 +364,12 @@ For documentation for each of these functions, see the Go standard
 library documentation at https://golang.org/pkg/ (for the packages
 exposed to micro plugins). The Lua standard library is also available
 to plugins though it is rather small.
+
+The following functions are also available from the go-humanize package:
+
+The `humanize` package exposes:
+* `Bytes`
+* `Ordinal`
 
 ## Adding help files, syntax files, or colorschemes in your plugin
 

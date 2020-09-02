@@ -1,10 +1,11 @@
 package display
 
 import (
-	"github.com/zyedidia/micro/internal/buffer"
-	"github.com/zyedidia/micro/internal/config"
-	"github.com/zyedidia/micro/internal/screen"
-	"github.com/zyedidia/micro/internal/views"
+	"github.com/zyedidia/micro/v2/internal/buffer"
+	"github.com/zyedidia/micro/v2/internal/config"
+	"github.com/zyedidia/micro/v2/internal/screen"
+	"github.com/zyedidia/micro/v2/internal/util"
+	"github.com/zyedidia/micro/v2/internal/views"
 )
 
 type UIWindow struct {
@@ -24,16 +25,27 @@ func (w *UIWindow) drawNode(n *views.Node) {
 		dividerStyle = style
 	}
 
+	divchars := config.GetGlobalOption("divchars").(string)
+	if util.CharacterCountInString(divchars) != 2 {
+		divchars = "|-"
+	}
+
+	divchar, combc, _ := util.DecodeCharacterInString(divchars)
+
+	divreverse := config.GetGlobalOption("divreverse").(bool)
+	if divreverse {
+		dividerStyle = dividerStyle.Reverse(true)
+	}
+
 	for i, c := range cs {
-		if c.IsLeaf() && c.Kind == views.STVert {
+		if c.Kind == views.STVert {
 			if i != len(cs)-1 {
 				for h := 0; h < c.H; h++ {
-					screen.SetContent(c.X+c.W, c.Y+h, '|', nil, dividerStyle.Reverse(true))
+					screen.SetContent(c.X+c.W, c.Y+h, divchar, combc, dividerStyle)
 				}
 			}
-		} else {
-			w.drawNode(c)
 		}
+		w.drawNode(c)
 	}
 }
 
@@ -41,32 +53,32 @@ func (w *UIWindow) Display() {
 	w.drawNode(w.root)
 }
 
-func (w *UIWindow) GetMouseSplitID(vloc buffer.Loc) uint64 {
-	var mouseLoc func(*views.Node) uint64
-	mouseLoc = func(n *views.Node) uint64 {
+func (w *UIWindow) GetMouseSplitNode(vloc buffer.Loc) *views.Node {
+	var mouseLoc func(*views.Node) *views.Node
+	mouseLoc = func(n *views.Node) *views.Node {
 		cs := n.Children()
 		for i, c := range cs {
 			if c.Kind == views.STVert {
 				if i != len(cs)-1 {
 					if vloc.X == c.X+c.W && vloc.Y >= c.Y && vloc.Y < c.Y+c.H {
-						return c.ID()
+						return c
 					}
 				}
 			} else if c.Kind == views.STHoriz {
 				if i != len(cs)-1 {
 					if vloc.Y == c.Y+c.H-1 && vloc.X >= c.X && vloc.X < c.X+c.W {
-						return c.ID()
+						return c
 					}
 				}
 			}
 		}
 		for _, c := range cs {
 			m := mouseLoc(c)
-			if m != 0 {
+			if m != nil {
 				return m
 			}
 		}
-		return 0
+		return nil
 	}
 	return mouseLoc(w.root)
 }

@@ -59,7 +59,7 @@ function removeLinter(name)
     linters[name] = nil
 end
 
-function init()
+function preinit()
     local devnull = "/dev/null"
     if runtime.GOOS == "windows" then
         devnull = "NUL"
@@ -68,9 +68,10 @@ function init()
     makeLinter("gcc", "c", "gcc", {"-fsyntax-only", "-Wall", "-Wextra", "%f"}, "%f:%l:%c:.+: %m")
     makeLinter("g++", "c++", "gcc", {"-fsyntax-only","-std=c++14", "-Wall", "-Wextra", "%f"}, "%f:%l:%c:.+: %m")
     makeLinter("dmd", "d", "dmd", {"-color=off", "-o-", "-w", "-wi", "-c", "%f"}, "%f%(%l%):.+: %m")
+    makeLinter("eslint", "javascript", "eslint", {"-f","compact","%f"}, "%f: line %l, col %c, %m")
     makeLinter("gobuild", "go", "go", {"build", "-o", devnull, "%d"}, "%f:%l:%c:? %m")
     -- makeLinter("golint", "go", "golint", {"%f"}, "%f:%l:%c: %m")
-    makeLinter("hlint", "haskell", "hlint", {"%f"}, "%f:%l:%c: %m")
+    makeLinter("hlint", "haskell", "hlint", {"%f"}, "%f:%l:%c.-: %m")
     makeLinter("javac", "java", "javac", {"-d", "%d", "%f"}, "%f:%l: error: %m")
     makeLinter("jshint", "javascript", "jshint", {"%f"}, "%f: line %l,.+, %m")
     makeLinter("literate", "literate", "lit", {"-c", "%f"}, "%f:%l:%m", {}, false, true)
@@ -80,9 +81,10 @@ function init()
     makeLinter("pyflakes", "python", "pyflakes", {"%f"}, "%f:%l:.-:? %m")
     makeLinter("mypy", "python", "mypy", {"%f"}, "%f:%l: %m")
     makeLinter("pylint", "python", "pylint", {"--output-format=parseable", "--reports=no", "%f"}, "%f:%l: %m")
+    makeLinter("flake8", "python", "flake8", {"%f"}, "%f:%l:%c: %m")
     makeLinter("shfmt", "shell", "shfmt", {"%f"}, "%f:%l:%c: %m")
     makeLinter("swiftc", "swift", "xcrun", {"swiftc", "%f"}, "%f:%l:%c:.+: %m", {"darwin"}, true)
-    makeLinter("swiftc", "swiftc", {"%f"}, "%f:%l:%c:.+: %m", {"linux"}, true)
+    makeLinter("swiftc", "swift", "swiftc", {"%f"}, "%f:%l:%c:.+: %m", {"linux"}, true)
     makeLinter("yaml", "yaml", "yamllint", {"--format", "parsable", "%f"}, "%f:%l:%c:.+ %m")
 
     config.MakeCommand("lint", function(bp, args)
@@ -166,7 +168,6 @@ function onExit(output, args)
             elseif col == nil then
                 hascol = false
             end
-            micro.Log(basename(buf.Path), basename(file))
             if basename(buf.Path) == basename(file) then
                 local bmsg = nil
                 if hascol then

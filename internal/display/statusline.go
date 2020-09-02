@@ -6,17 +6,16 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	luar "layeh.com/gopher-luar"
 
 	runewidth "github.com/mattn/go-runewidth"
 	lua "github.com/yuin/gopher-lua"
-	"github.com/zyedidia/micro/internal/buffer"
-	"github.com/zyedidia/micro/internal/config"
-	ulua "github.com/zyedidia/micro/internal/lua"
-	"github.com/zyedidia/micro/internal/screen"
-	"github.com/zyedidia/micro/internal/util"
+	"github.com/zyedidia/micro/v2/internal/buffer"
+	"github.com/zyedidia/micro/v2/internal/config"
+	ulua "github.com/zyedidia/micro/v2/internal/lua"
+	"github.com/zyedidia/micro/v2/internal/screen"
+	"github.com/zyedidia/micro/v2/internal/util"
 )
 
 // StatusLine represents the information line at the bottom
@@ -168,34 +167,36 @@ func (s *StatusLine) Display() {
 		statusLineStyle = style
 	}
 
-	leftLen := util.StringWidth(leftText, utf8.RuneCount(leftText), 1)
-	rightLen := util.StringWidth(rightText, utf8.RuneCount(rightText), 1)
+	leftLen := util.StringWidth(leftText, util.CharacterCount(leftText), 1)
+	rightLen := util.StringWidth(rightText, util.CharacterCount(rightText), 1)
 
 	winX := s.win.X
 	for x := 0; x < s.win.Width; x++ {
 		if x < leftLen {
-			r, size := utf8.DecodeRune(leftText)
+			r, combc, size := util.DecodeCharacter(leftText)
 			leftText = leftText[size:]
 			rw := runewidth.RuneWidth(r)
 			for j := 0; j < rw; j++ {
 				c := r
 				if j > 0 {
 					c = ' '
+					combc = nil
 					x++
 				}
-				screen.SetContent(winX+x, y, c, nil, statusLineStyle)
+				screen.SetContent(winX+x, y, c, combc, statusLineStyle)
 			}
 		} else if x >= s.win.Width-rightLen && x < rightLen+s.win.Width-rightLen {
-			r, size := utf8.DecodeRune(rightText)
+			r, combc, size := util.DecodeCharacter(rightText)
 			rightText = rightText[size:]
 			rw := runewidth.RuneWidth(r)
 			for j := 0; j < rw; j++ {
 				c := r
 				if j > 0 {
 					c = ' '
+					combc = nil
 					x++
 				}
-				screen.SetContent(winX+x, y, c, nil, statusLineStyle)
+				screen.SetContent(winX+x, y, c, combc, statusLineStyle)
 			}
 		} else {
 			screen.SetContent(winX+x, y, ' ', nil, statusLineStyle)

@@ -2,13 +2,12 @@ package display
 
 import (
 	"strconv"
-	"unicode/utf8"
 
 	runewidth "github.com/mattn/go-runewidth"
-	"github.com/zyedidia/micro/internal/buffer"
-	"github.com/zyedidia/micro/internal/config"
-	"github.com/zyedidia/micro/internal/screen"
-	"github.com/zyedidia/micro/internal/util"
+	"github.com/zyedidia/micro/v2/internal/buffer"
+	"github.com/zyedidia/micro/v2/internal/config"
+	"github.com/zyedidia/micro/v2/internal/screen"
+	"github.com/zyedidia/micro/v2/internal/util"
 	"github.com/zyedidia/tcell"
 )
 
@@ -73,9 +72,9 @@ func (w *BufWindow) getStartInfo(n, lineN int) ([]byte, int, int, *tcell.Style) 
 	curStyle := config.DefStyle
 	var s *tcell.Style
 	for len(b) > 0 {
-		r, size := utf8.DecodeRune(b)
+		r, _, size := util.DecodeCharacter(b)
 
-		curStyle, found := w.getStyle(curStyle, bloc, r)
+		curStyle, found := w.getStyle(curStyle, bloc)
 		if found {
 			s = &curStyle
 		}
@@ -237,7 +236,7 @@ func (w *BufWindow) LocFromVisual(svloc buffer.Loc) buffer.Loc {
 				return bloc
 			}
 
-			r, size := utf8.DecodeRune(line)
+			r, _, size := util.DecodeCharacter(line)
 			draw()
 			width := 0
 
@@ -336,7 +335,14 @@ func (w *BufWindow) drawDiffGutter(backgroundStyle tcell.Style, softwrapped bool
 }
 
 func (w *BufWindow) drawLineNum(lineNumStyle tcell.Style, softwrapped bool, maxLineNumLength int, vloc *buffer.Loc, bloc *buffer.Loc) {
-	lineNum := strconv.Itoa(bloc.Y + 1)
+	cursorLine := w.Buf.GetActiveCursor().Loc.Y
+	var lineInt int
+	if w.Buf.Settings["relativeruler"] == false || cursorLine == bloc.Y {
+		lineInt = bloc.Y + 1
+	} else {
+		lineInt = bloc.Y - cursorLine
+	}
+	lineNum := strconv.Itoa(util.Abs(lineInt))
 
 	// Write the spaces before the line number if necessary
 	for i := 0; i < maxLineNumLength-len(lineNum); i++ {
@@ -360,7 +366,7 @@ func (w *BufWindow) drawLineNum(lineNumStyle tcell.Style, softwrapped bool, maxL
 
 // getStyle returns the highlight style for the given character position
 // If there is no change to the current highlight style it just returns that
-func (w *BufWindow) getStyle(style tcell.Style, bloc buffer.Loc, r rune) (tcell.Style, bool) {
+func (w *BufWindow) getStyle(style tcell.Style, bloc buffer.Loc) (tcell.Style, bool) {
 	if group, ok := w.Buf.Match(bloc.Y)[bloc.X]; ok {
 		s := config.GetColor(group.String())
 		return s, true
@@ -510,8 +516,15 @@ func (w *BufWindow) displayBuffer() {
 		}
 		bloc.X = bslice
 
-		draw := func(r rune, style tcell.Style, showcursor bool) {
+		draw := func(r rune, combc []rune, style tcell.Style, showcursor bool) {
 			if nColsBeforeStart <= 0 {
+				_, origBg, _ := style.Decompose()
+				_, defBg, _ := config.DefStyle.Decompose()
+
+				// syntax highlighting with non-default background takes precedence
+				// over cursor-line and color-column
+				dontOverrideBackground := origBg != defBg
+
 				for _, c := range cursors {
 					if c.HasSelection() &&
 						(bloc.GreaterEqual(c.CurSelection[0]) && bloc.LessThan(c.CurSelection[1]) ||
@@ -524,7 +537,7 @@ func (w *BufWindow) displayBuffer() {
 						}
 					}
 
-					if b.Settings["cursorline"].(bool) && w.active &&
+					if b.Settings["cursorline"].(bool) && w.active && !dontOverrideBackground &&
 						!c.HasSelection() && c.Y == bloc.Y {
 						if s, ok := config.Colorscheme["cursor-line"]; ok {
 							fg, _, _ := s.Decompose()
@@ -556,7 +569,7 @@ func (w *BufWindow) displayBuffer() {
 				}
 
 				if s, ok := config.Colorscheme["color-column"]; ok {
-					if colorcolumn != 0 && vloc.X-w.gutterOffset+w.StartCol == colorcolumn {
+					if colorcolumn != 0 && vloc.X-w.gutterOffset+w.StartCol == colorcolumn && !dontOverrideBackground {
 						fg, _, _ := s.Decompose()
 						style = style.Background(fg)
 					}
@@ -568,7 +581,7 @@ func (w *BufWindow) displayBuffer() {
 					}
 				}
 
-				screen.SetContent(w.X+vloc.X, w.Y+vloc.Y, r, nil, style)
+				screen.SetContent(w.X+vloc.X, w.Y+vloc.Y, r, combc, style)
 
 				if showcursor {
 					for _, c := range cursors {
@@ -584,10 +597,11 @@ func (w *BufWindow) displayBuffer() {
 
 		totalwidth := w.StartCol - nColsBeforeStart
 		for len(line) > 0 {
-			r, size := utf8.DecodeRune(line)
-			curStyle, _ = w.getStyle(curStyle, bloc, r)
+			r, combc, size := util.DecodeCharacter(line)
 
-			draw(r, curStyle, true)
+			curStyle, _ = w.getStyle(curStyle, bloc)
+
+			draw(r, combc, curStyle, true)
 
 			width := 0
 
@@ -604,7 +618,7 @@ func (w *BufWindow) displayBuffer() {
 			// Draw any extra characters either spaces for tabs or @ for incomplete wide runes
 			if width > 1 {
 				for i := 1; i < width; i++ {
-					draw(char, curStyle, false)
+					draw(char, nil, curStyle, false)
 				}
 			}
 			bloc.X++
@@ -659,7 +673,8 @@ func (w *BufWindow) displayBuffer() {
 		}
 
 		if vloc.X != bufWidth {
-			draw(' ', curStyle, true)
+			// Display newline within a selection
+			draw(' ', nil, config.DefStyle, true)
 		}
 
 		bloc.X = w.StartCol
@@ -682,8 +697,27 @@ func (w *BufWindow) displayStatusLine() {
 		w.sline.Display()
 	} else if w.Y+w.Height != infoY {
 		w.drawStatus = true
+
+		divchars := config.GetGlobalOption("divchars").(string)
+		if util.CharacterCountInString(divchars) != 2 {
+			divchars = "|-"
+		}
+
+		_, _, size := util.DecodeCharacterInString(divchars)
+		divchar, combc, _ := util.DecodeCharacterInString(divchars[size:])
+
+		dividerStyle := config.DefStyle
+		if style, ok := config.Colorscheme["divider"]; ok {
+			dividerStyle = style
+		}
+
+		divreverse := config.GetGlobalOption("divreverse").(bool)
+		if divreverse {
+			dividerStyle = dividerStyle.Reverse(true)
+		}
+
 		for x := w.X; x < w.X+w.Width; x++ {
-			screen.SetContent(x, w.Y+w.Height-1, '-', nil, config.DefStyle.Reverse(true))
+			screen.SetContent(x, w.Y+w.Height-1, divchar, combc, dividerStyle)
 		}
 	} else {
 		w.drawStatus = false
@@ -702,8 +736,14 @@ func (w *BufWindow) displayScrollBar() {
 			barsize = 1
 		}
 		barstart := w.Y + int(float64(w.StartLine)/float64(w.Buf.LinesNum())*float64(w.Height))
+
+		scrollBarStyle := config.DefStyle.Reverse(true)
+		if style, ok := config.Colorscheme["scrollbar"]; ok {
+			scrollBarStyle = style
+		}
+
 		for y := barstart; y < util.Min(barstart+barsize, w.Y+bufHeight); y++ {
-			screen.SetContent(scrollX, y, '|', nil, config.DefStyle.Reverse(true))
+			screen.SetContent(scrollX, y, '|', nil, scrollBarStyle)
 		}
 	}
 }

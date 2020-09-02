@@ -32,7 +32,7 @@ You can also check out the website for Micro at https://micro-editor.github.io.
   - [macOS terminal](#macos-terminal)
   - [Linux clipboard support](#linux-clipboard-support)
   - [Colors and syntax highlighting](#colors-and-syntax-highlighting)
-  - [Plan9, Cygwin, Mingw](#plan9-cygwin-mingw)
+  - [Cygwin, Mingw, Plan9](#cygwin-mingw-plan9)
 - [Usage](#usage)
 - [Documentation and Help](#documentation-and-help)
 - [Contributing](#contributing)
@@ -44,7 +44,7 @@ You can also check out the website for Micro at https://micro-editor.github.io.
 - Easy to use and install.
 - No dependencies or external files are needed — just the binary you can download further down the page.
 - Multiple cursors.
-- Common keybindings (<kbd>Ctrl+S</kbd>, <kbd>Ctrl+C</kbd>, <kbd>Ctrl+V</kbd>, <kbd>Ctrl+Z</kbd>, …).
+- Common keybindings (<kbd>Ctrl-s</kbd>, <kbd>Ctrl-c</kbd>, <kbd>Ctrl-v</kbd>, <kbd>Ctrl-z</kbd>, …).
   - Keybindings can be rebound to your liking.
 - Sane defaults.
   - You shouldn't have to configure much out of the box (and it is extremely easy to configure).
@@ -53,13 +53,13 @@ You can also check out the website for Micro at https://micro-editor.github.io.
 - Extremely good mouse support.
   - This means mouse dragging to create a selection, double click to select by word, and triple click to select by line.
 - Cross-platform (it should work on all the platforms Go runs on).
-  - Note that while Windows is supported Mingw/Cygwin is not (see below)
+  - Note that while Windows is supported Mingw/Cygwin is not (see below).
 - Plugin system (plugins are written in Lua).
   - micro has a built-in plugin manager to automatically install, remove, and update plugins.
-- Built-in diff gutter
-- Simple autocompletion
+- Built-in diff gutter.
+- Simple autocompletion.
 - Persistent undo.
-- Automatic linting and error notifications
+- Automatic linting and error notifications.
 - Syntax highlighting for over [130 languages](runtime/syntax).
 - Color scheme support.
   - By default, micro comes with 16, 256, and true color themes.
@@ -76,16 +76,16 @@ To install micro, you can download a [prebuilt binary](https://github.com/zyedid
 
 If you want more information about ways to install micro, see this [wiki page](https://github.com/zyedidia/micro/wiki/Installing-Micro).
 
+Use `micro -version` to get the version information after installing. It is only guaranteed that you are installing the most recent
+stable version if you install from the prebuilt binaries, Homebrew, or Snap.
+
+A desktop entry file and man page can be found in the [assets/packaging](https://github.com/zyedidia/micro/tree/master/assets/packaging) directory.
+
 ### Prebuilt binaries
 
 All you need to install micro is one file, the binary itself. It's as simple as that!
 
 Download the binary from the [releases](https://github.com/zyedidia/micro/releases) page.
-
-On that page you'll see the nightly release, which contains binaries for micro which are built every night,
-and you'll see all the stable releases with the corresponding binaries.
-
-Running `micro -version` will give you the version information.
 
 ### Installation script
 
@@ -97,7 +97,9 @@ You can easily install micro by running
 curl https://getmic.ro | bash
 ```
 
-The script will install the micro binary to the current directory. See its [GitHub repository](https://github.com/benweissmann/getmic.ro) for more information.
+The script will place the micro binary in the current directory. From there, you can move it to a directory on your path of your choosing (e.g. `sudo mv micro /usr/bin`). See its [GitHub repository](https://github.com/benweissmann/getmic.ro) for more information.
+
+To uninstall micro, simply remove the binary, and the configuration directory at `~/.config/micro`.
 
 ### Package managers
 
@@ -107,29 +109,36 @@ You can install micro using Homebrew on Mac:
 brew install micro
 ```
 
+**Note for Mac:** All micro keybindings use the control or alt (option) key, not the command
+key. By default, macOS terminals do not forward alt key events. To fix this, please see
+the section on [macOS terminals](https://github.com/zyedidia/micro#macos-terminal) further below.
+
 On Linux, you can install micro through [snap](https://snapcraft.io/docs/core/install)
 
 ```
 snap install micro --classic
 ```
 
-On Debian `unstable | testing | buster-backports` and Ubuntu `focal` (20.04), micro is available
-via `apt`:
+**Note for Linux:** for interfacing with the local system clipboard, `xclip` or `xsel`
+must be installed. Please see the section on [Linux clipboard support](https://github.com/zyedidia/micro#linux-clipboard-support)
+further below.
 
-```
-sudo apt install micro
-```
+Micro is also available through other package managers on Linux such as apt, dnf, AUR, Nix, and package managers
+for other operating systems. These packages are not guaranteed to be up-to-date.
 
-Micro is also available through other package managers on Linux such as AUR, Nix, and package managers
-for other operating systems:
-
-* Windows: [Chocolatey](https://chocolatey.org) and [Scoop](https://github.com/lukesampson/scoop)
-    * `choco install micro`
-    * `scoop install micro`
-* OpenBSD: Available in the ports tree and also available as a binary package
-    * `pkd_add -v micro`
-* Arch Linux, CRUX, Termux for Android
-    * See details in the [wiki page](https://github.com/zyedidia/micro/wiki/Installing-Micro)
+* Linux: Available in distro-specific package managers.
+    * `apt install micro` (Ubuntu 20.04 `focal`, and Debian `unstable | testing | buster-backports`). At the moment, this package (2.0.1-1) is outdated and has a known bug where debug mode is enabled.
+    * `dnf install micro` (Fedora).
+    * `yay -S micro` (Arch Linux).
+    * `eopkg install micro` (Solus).
+    * See [wiki](https://github.com/zyedidia/micro/wiki/Installing-Micro) for details about CRUX, Termux.
+* Windows: [Chocolatey](https://chocolatey.org) and [Scoop](https://github.com/lukesampson/scoop).
+    * `choco install micro`.
+    * `scoop install micro`.
+* OpenBSD: Available in the ports tree and also available as a binary package.
+    * `pkd_add -v micro`.
+* NetBSD, macOS, Linux, Illumos, etc. with [pkgsrc](http://www.pkgsrc.org/)-current:
+    * `pkg_add micro`
 
 ### Building from source
 
@@ -165,7 +174,7 @@ CGO_ENABLED=0 make build
 
 ### macOS terminal
 
-If you are using macOS, you should consider using [iTerm2](http://iterm2.com/) instead of the default terminal (Terminal.app). The iTerm2 terminal has much better mouse support as well as better handling of key events. For best keybinding behavior, choose `xterm defaults` under `Preferences->Profiles->Keys->Load Preset`. The newest versions also support true color.
+If you are using macOS, you should consider using [iTerm2](http://iterm2.com/) instead of the default terminal (Terminal.app). The iTerm2 terminal has much better mouse support as well as better handling of key events. For best keybinding behavior, choose `xterm defaults` under `Preferences->Profiles->Keys->Presets...`, and select `Esc+` for `Left Option Key` in the same menu. The newest versions also support true color.
 
 If you still insist on using the default Mac terminal, be sure to set `Use Option key as Meta key` under
 `Preferences->Profiles->Keyboard` to use <kbd>option</kbd> as <kbd>alt</kbd>.
@@ -183,7 +192,7 @@ If you don't have these commands, micro will use an internal clipboard for copy 
 
 If you open micro and it doesn't seem like syntax highlighting is working, this is probably because
 you are using a terminal which does not support 256 color mode. Try changing the color scheme to `simple`
-by pressing <kbd>Ctrl+E</kbd> in micro and typing `set colorscheme simple`.
+by pressing <kbd>Ctrl-e</kbd> in micro and typing `set colorscheme simple`.
 
 If you are using the default Ubuntu terminal, to enable 256 make sure your `TERM` variable is set
 to `xterm-256color`.
@@ -224,7 +233,7 @@ click to enable line selection.
 
 ## Documentation and Help
 
-micro has a built-in help system which you can access by pressing <kbd>Ctrl+E</kbd> and typing `help`. Additionally, you can
+micro has a built-in help system which you can access by pressing <kbd>Ctrl-e</kbd> and typing `help`. Additionally, you can
 view the help files here:
 
 - [main help](https://github.com/zyedidia/micro/tree/master/runtime/help/help.md)
@@ -245,3 +254,5 @@ You can use the [GitHub issue tracker](https://github.com/zyedidia/micro/issues)
 to report bugs, ask questions, or suggest new features.
 
 For a more informal setting to discuss the editor, you can join the [Gitter chat](https://gitter.im/zyedidia/micro).
+
+Sometimes I am unresponsive, and I apologize! If that happens, please ping me.

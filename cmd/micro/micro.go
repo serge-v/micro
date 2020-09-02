@@ -5,26 +5,30 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/signal"
 	"regexp"
 	"runtime"
 	"sort"
+	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/go-errors/errors"
 	isatty "github.com/mattn/go-isatty"
 	lua "github.com/yuin/gopher-lua"
-	"github.com/zyedidia/micro/internal/action"
-	"github.com/zyedidia/micro/internal/buffer"
-	"github.com/zyedidia/micro/internal/config"
-	"github.com/zyedidia/micro/internal/screen"
-	"github.com/zyedidia/micro/internal/shell"
-	"github.com/zyedidia/micro/internal/util"
+	"github.com/zyedidia/micro/v2/internal/action"
+	"github.com/zyedidia/micro/v2/internal/buffer"
+	"github.com/zyedidia/micro/v2/internal/clipboard"
+	"github.com/zyedidia/micro/v2/internal/config"
+	ulua "github.com/zyedidia/micro/v2/internal/lua"
+	"github.com/zyedidia/micro/v2/internal/screen"
+	"github.com/zyedidia/micro/v2/internal/shell"
+	"github.com/zyedidia/micro/v2/internal/util"
 	"github.com/zyedidia/tcell"
 )
 
 var (
 	// Event channel
-	events   chan tcell.Event
 	autosave chan bool
 
 	// Command line flags
@@ -44,7 +48,7 @@ func InitFlags() {
 		fmt.Println("    \tCleans the configuration directory")
 		fmt.Println("-config-dir dir")
 		fmt.Println("    \tSpecify a custom location for the configuration directory")
-		fmt.Println("[FILE]:LINE:COL")
+		fmt.Println("[FILE]:LINE:COL (if the `parsecursor` option is enabled)")
 		fmt.Println("+LINE:COL")
 		fmt.Println("    \tSpecify a line and column to start the cursor at when opening a buffer")
 		fmt.Println("-options")
@@ -131,7 +135,7 @@ func DoPluginFlags() {
 
 // LoadInput determines which files should be loaded into buffers
 // based on the input stored in flag.Args()
-func LoadInput() []*buffer.Buffer {
+func LoadInput(args []string) []*buffer.Buffer {
 	// There are a number of ways micro should start given its input
 
 	// 1. If it is given a files in flag.Args(), it should open those
@@ -146,7 +150,6 @@ func LoadInput() []*buffer.Buffer {
 	var filename string
 	var input []byte
 	var err error
-	args := flag.Args()
 	buffers := make([]*buffer.Buffer, 0, len(args))
 
 	btype := buffer.BTDefault
@@ -155,18 +158,31 @@ func LoadInput() []*buffer.Buffer {
 	}
 
 	files := make([]string, 0, len(args))
-	flagStartPos := ""
-	flagr := regexp.MustCompile(`^\+\d+(:\d+)?$`)
+	flagStartPos := buffer.Loc{-1, -1}
+	flagr := regexp.MustCompile(`^\+(\d+)(?::(\d+))?$`)
 	for _, a := range args {
-		if flagr.MatchString(a) {
-			flagStartPos = a[1:]
-		} else {
-			if flagStartPos != "" {
-				files = append(files, a+":"+flagStartPos)
-				flagStartPos = ""
-			} else {
-				files = append(files, a)
+		match := flagr.FindStringSubmatch(a)
+		if len(match) == 3 && match[2] != "" {
+			line, err := strconv.Atoi(match[1])
+			if err != nil {
+				screen.TermMessage(err)
+				continue
 			}
+			col, err := strconv.Atoi(match[2])
+			if err != nil {
+				screen.TermMessage(err)
+				continue
+			}
+			flagStartPos = buffer.Loc{col - 1, line - 1}
+		} else if len(match) == 3 && match[2] == "" {
+			line, err := strconv.Atoi(match[1])
+			if err != nil {
+				screen.TermMessage(err)
+				continue
+			}
+			flagStartPos = buffer.Loc{0, line - 1}
+		} else {
+			files = append(files, a)
 		}
 	}
 
@@ -174,7 +190,7 @@ func LoadInput() []*buffer.Buffer {
 		// Option 1
 		// We go through each file and load it
 		for i := 0; i < len(files); i++ {
-			buf, err := buffer.NewBufferFromFile(files[i], btype)
+			buf, err := buffer.NewBufferFromFileAtLoc(files[i], btype, flagStartPos)
 			if err != nil {
 				screen.TermMessage(err)
 				continue
@@ -191,10 +207,10 @@ func LoadInput() []*buffer.Buffer {
 			screen.TermMessage("Error reading from stdin: ", err)
 			input = []byte{}
 		}
-		buffers = append(buffers, buffer.NewBufferFromString(string(input), filename, btype))
+		buffers = append(buffers, buffer.NewBufferFromStringAtLoc(string(input), filename, btype, flagStartPos))
 	} else {
 		// Option 3, just open an empty buffer
-		buffers = append(buffers, buffer.NewBufferFromString(string(input), filename, btype))
+		buffers = append(buffers, buffer.NewBufferFromStringAtLoc(string(input), filename, btype, flagStartPos))
 	}
 
 	return buffers
@@ -229,7 +245,10 @@ func main() {
 	if err != nil {
 		screen.TermMessage(err)
 	}
-	config.InitGlobalSettings()
+	err = config.InitGlobalSettings()
+	if err != nil {
+		screen.TermMessage(err)
+	}
 
 	// flag options
 	for k, v := range optionFlags {
@@ -245,15 +264,43 @@ func main() {
 
 	DoPluginFlags()
 
-	screen.Init()
+	err = screen.Init()
+	if err != nil {
+		fmt.Println(err)
+		fmt.Println("Fatal: Micro could not initialize a Screen.")
+		os.Exit(1)
+	}
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Kill, syscall.SIGTERM)
+
+	go func() {
+		<-c
+
+		for _, b := range buffer.OpenBuffers {
+			if !b.Modified() {
+				b.Fini()
+			}
+		}
+
+		if screen.Screen != nil {
+			screen.Screen.Fini()
+		}
+		os.Exit(0)
+	}()
+
+	m := clipboard.SetMethod(config.GetGlobalOption("clipboard").(string))
+	clipErr := clipboard.Initialize(m)
 
 	defer func() {
 		if err := recover(); err != nil {
-			screen.Screen.Fini()
+			if screen.Screen != nil {
+				screen.Screen.Fini()
+			}
 			fmt.Println("Micro encountered an error:", err)
 			// backup all open buffers
 			for _, b := range buffer.OpenBuffers {
-				b.Backup(false)
+				b.Backup()
 			}
 			// Print the stack trace too
 			fmt.Print(errors.Wrap(err, 2).ErrorStack())
@@ -274,7 +321,13 @@ func main() {
 		screen.TermMessage(err)
 	}
 
-	b := LoadInput()
+	err = config.RunPluginFn("preinit")
+	if err != nil {
+		screen.TermMessage(err)
+	}
+
+	args := flag.Args()
+	b := LoadInput(args)
 
 	if len(b) == 0 {
 		// No buffers to open
@@ -290,7 +343,16 @@ func main() {
 		screen.TermMessage(err)
 	}
 
-	events = make(chan tcell.Event)
+	err = config.RunPluginFn("postinit")
+	if err != nil {
+		screen.TermMessage(err)
+	}
+
+	if clipErr != nil {
+		action.InfoBar.Error(clipErr, " or change 'clipboard' option")
+	}
+
+	screen.Events = make(chan tcell.Event)
 
 	// Here is the event loop which runs in a separate thread
 	go func() {
@@ -299,7 +361,7 @@ func main() {
 			e := screen.Screen.PollEvent()
 			screen.Unlock()
 			if e != nil {
-				events <- e
+				screen.Events <- e
 			}
 		}
 	}()
@@ -312,7 +374,7 @@ func main() {
 
 	// wait for initial resize event
 	select {
-	case event := <-events:
+	case event := <-screen.Events:
 		action.Tabs.HandleEvent(event)
 	case <-time.After(10 * time.Millisecond):
 		// time out after 10ms
@@ -355,19 +417,28 @@ func DoEvent() {
 	select {
 	case f := <-shell.Jobs:
 		// If a new job has finished while running in the background we should execute the callback
+		ulua.Lock.Lock()
 		f.Function(f.Output, f.Args)
+		ulua.Lock.Unlock()
 	case <-config.Autosave:
+		ulua.Lock.Lock()
 		for _, b := range buffer.OpenBuffers {
 			b.Save()
 		}
+		ulua.Lock.Unlock()
 	case <-shell.CloseTerms:
-	case event = <-events:
+	case event = <-screen.Events:
 	case <-screen.DrawChan():
+		for len(screen.DrawChan()) > 0 {
+			<-screen.DrawChan()
+		}
 	}
 
+	ulua.Lock.Lock()
 	if action.InfoBar.HasPrompt {
 		action.InfoBar.HandleEvent(event)
 	} else {
 		action.Tabs.HandleEvent(event)
 	}
+	ulua.Lock.Unlock()
 }

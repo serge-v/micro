@@ -1,4 +1,4 @@
-module github.com/zyedidia/micro
+module github.com/zyedidia/micro/v2
 
 require (
 	github.com/blang/semver v3.5.1+incompatible
@@ -12,17 +12,21 @@ require (
 	github.com/sergi/go-diff v1.1.0
 	github.com/stretchr/testify v1.4.0
 	github.com/yuin/gopher-lua v0.0.0-20191220021717-ab39c6098bdb
-	github.com/zyedidia/clipboard v0.0.0-20200421031010-7c45b8673834
+	github.com/zyedidia/clipboard v1.0.3
 	github.com/zyedidia/glob v0.0.0-20170209203856-dd4023a66dc3
 	github.com/zyedidia/highlight v0.0.0-20170330143449-201131ce5cf5
 	github.com/zyedidia/json5 v0.0.0-20200102012142-2da050b1a98d
 	github.com/zyedidia/pty v2.0.0+incompatible // indirect
-	github.com/zyedidia/tcell v1.4.4
+	github.com/zyedidia/tcell v1.4.12
 	github.com/zyedidia/terminal v0.0.0-20180726154117-533c623e2415
 	golang.org/x/text v0.3.2
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 	gopkg.in/yaml.v2 v2.2.7
 	layeh.com/gopher-luar v1.0.7
 )
+
+replace github.com/kballard/go-shellquote => github.com/zyedidia/go-shellquote v0.0.0-20200613203517-eccd813c0655
+
+replace github.com/mattn/go-runewidth => github.com/p-e-w/go-runewidth v0.0.10-0.20200613030200-3e1705c5c059
 
 go 1.11

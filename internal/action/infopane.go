@@ -2,16 +2,56 @@ package action
 
 import (
 	"bytes"
-	"strings"
 
-	"github.com/zyedidia/micro/internal/buffer"
-	"github.com/zyedidia/micro/internal/display"
-	"github.com/zyedidia/micro/internal/info"
-	"github.com/zyedidia/micro/internal/util"
+	"github.com/zyedidia/micro/v2/internal/buffer"
+	"github.com/zyedidia/micro/v2/internal/display"
+	"github.com/zyedidia/micro/v2/internal/info"
+	"github.com/zyedidia/micro/v2/internal/util"
 	"github.com/zyedidia/tcell"
 )
 
 type InfoKeyAction func(*InfoPane)
+
+var InfoBindings *KeyTree
+var InfoBufBindings *KeyTree
+
+func init() {
+	InfoBindings = NewKeyTree()
+	InfoBufBindings = NewKeyTree()
+}
+
+func InfoMapEvent(k Event, action string) {
+	switch e := k.(type) {
+	case KeyEvent, KeySequenceEvent, RawEvent:
+		infoMapKey(e, action)
+	case MouseEvent:
+		infoMapMouse(e, action)
+	}
+}
+
+func infoMapKey(k Event, action string) {
+	if f, ok := InfoKeyActions[action]; ok {
+		InfoBindings.RegisterKeyBinding(k, InfoKeyActionGeneral(f))
+	} else if f, ok := BufKeyActions[action]; ok {
+		InfoBufBindings.RegisterKeyBinding(k, BufKeyActionGeneral(f))
+	}
+}
+
+func infoMapMouse(k MouseEvent, action string) {
+	// TODO: map mouse
+	if f, ok := BufMouseActions[action]; ok {
+		InfoBufBindings.RegisterMouseBinding(k, BufMouseActionGeneral(f))
+	} else {
+		infoMapKey(k, action)
+	}
+}
+
+func InfoKeyActionGeneral(a InfoKeyAction) PaneKeyAction {
+	return func(p Pane) bool {
+		a(p.(*InfoPane))
+		return true
+	}
+}
 
 type InfoPane struct {
 	*BufPane
@@ -22,6 +62,7 @@ func NewInfoPane(ib *info.InfoBuf, w display.BWindow, tab *Tab) *InfoPane {
 	ip := new(InfoPane)
 	ip.InfoBuf = ib
 	ip.BufPane = NewBufPane(ib.Buffer, w, tab)
+	ip.BufPane.bindings = InfoBufBindings
 
 	return ip
 }
@@ -76,104 +117,43 @@ func (h *InfoPane) HandleEvent(event tcell.Event) {
 
 // DoKeyEvent executes a key event for the command bar, doing any overridden actions
 func (h *InfoPane) DoKeyEvent(e KeyEvent) bool {
-	done := false
-	if action, ok := BufKeyBindings[e]; ok {
-		estr := BufKeyStrings[e]
-		for _, s := range InfoNones {
-			if s == estr {
-				return false
-			}
-		}
-		for s, a := range InfoOverrides {
-			// TODO this is a hack and really we should have support
-			// for having binding overrides for different buffers
-			if strings.HasPrefix(estr, s) {
-				done = true
-				a(h)
-				break
-			}
-		}
-		if !done {
-			done = action(h.BufPane)
+	action, more := InfoBindings.NextEvent(e, nil)
+	if action != nil && !more {
+		action(h)
+		InfoBindings.ResetEvents()
+
+		return true
+	} else if action == nil && !more {
+		InfoBindings.ResetEvents()
+		// return false //TODO:?
+	}
+
+	if !more {
+		action, more = InfoBufBindings.NextEvent(e, nil)
+		if action != nil && !more {
+			done := action(h.BufPane)
+			InfoBufBindings.ResetEvents()
+			return done
+		} else if action == nil && !more {
+			InfoBufBindings.ResetEvents()
 		}
 	}
-	return done
+
+	return more
 }
 
-// InfoNones is a list of actions that should have no effect when executed
-// by an infohandler
-var InfoNones = []string{
-	"Save",
-	"SaveAll",
-	"SaveAs",
-	"Find",
-	"FindNext",
-	"FindPrevious",
-	"Center",
-	"DuplicateLine",
-	"MoveLinesUp",
-	"MoveLinesDown",
-	"OpenFile",
-	"Start",
-	"End",
-	"PageUp",
-	"PageDown",
-	"SelectPageUp",
-	"SelectPageDown",
-	"HalfPageUp",
-	"HalfPageDown",
-	"ToggleHelp",
-	"ToggleKeyMenu",
-	"ToggleDiffGutter",
-	"ToggleRuler",
-	"JumpLine",
-	"ClearStatus",
-	"ShellMode",
-	"CommandMode",
-	"AddTab",
-	"PreviousTab",
-	"NextTab",
-	"NextSplit",
-	"PreviousSplit",
-	"Unsplit",
-	"VSplit",
-	"HSplit",
-	"ToggleMacro",
-	"PlayMacro",
-	"Suspend",
-	"ScrollUp",
-	"ScrollDown",
-	"SpawnMultiCursor",
-	"SpawnMultiCursorSelect",
-	"RemoveMultiCursor",
-	"RemoveAllMultiCursors",
-	"SkipMultiCursor",
-}
-
-// InfoOverrides is the list of actions which have been overridden
-// by the infohandler
-var InfoOverrides = map[string]InfoKeyAction{
-	"CursorUp":      (*InfoPane).CursorUp,
-	"CursorDown":    (*InfoPane).CursorDown,
-	"InsertNewline": (*InfoPane).InsertNewline,
-	"Autocomplete":  (*InfoPane).Autocomplete,
-	"Escape":        (*InfoPane).Escape,
-	"Quit":          (*InfoPane).Quit,
-	"QuitAll":       (*InfoPane).QuitAll,
-}
-
-// CursorUp cycles history up
-func (h *InfoPane) CursorUp() {
+// HistoryUp cycles history up
+func (h *InfoPane) HistoryUp() {
 	h.UpHistory(h.History[h.PromptType])
 }
 
-// CursorDown cycles history down
-func (h *InfoPane) CursorDown() {
+// HistoryDown cycles history down
+func (h *InfoPane) HistoryDown() {
 	h.DownHistory(h.History[h.PromptType])
 }
 
 // Autocomplete begins autocompletion
-func (h *InfoPane) Autocomplete() {
+func (h *InfoPane) CommandComplete() {
 	b := h.Buf
 	if b.HasSuggestions {
 		b.CycleAutocomplete(true)
@@ -201,24 +181,23 @@ func (h *InfoPane) Autocomplete() {
 	}
 }
 
-// InsertNewline completes the prompt
-func (h *InfoPane) InsertNewline() {
+// ExecuteCommand completes the prompt
+func (h *InfoPane) ExecuteCommand() {
 	if !h.HasYN {
 		h.DonePrompt(false)
 	}
 }
 
-// Quit cancels the prompt
-func (h *InfoPane) Quit() {
+// AbortCommand cancels the prompt
+func (h *InfoPane) AbortCommand() {
 	h.DonePrompt(true)
 }
 
-// QuitAll cancels the prompt
-func (h *InfoPane) QuitAll() {
-	h.DonePrompt(true)
-}
-
-// Escape cancels the prompt
-func (h *InfoPane) Escape() {
-	h.DonePrompt(true)
+// InfoKeyActions contains the list of all possible key actions the infopane could execute
+var InfoKeyActions = map[string]InfoKeyAction{
+	"HistoryUp":       (*InfoPane).HistoryUp,
+	"HistoryDown":     (*InfoPane).HistoryDown,
+	"CommandComplete": (*InfoPane).CommandComplete,
+	"ExecuteCommand":  (*InfoPane).ExecuteCommand,
+	"AbortCommand":    (*InfoPane).AbortCommand,
 }

@@ -3,7 +3,7 @@ package info
 import (
 	"fmt"
 
-	"github.com/zyedidia/micro/internal/buffer"
+	"github.com/zyedidia/micro/v2/internal/buffer"
 )
 
 // The InfoBuf displays messages and other info at the bottom of the screen.
@@ -145,8 +145,16 @@ func (i *InfoBuf) DonePrompt(canceled bool) {
 				i.PromptCallback(resp, false)
 				h := i.History[i.PromptType]
 				h[len(h)-1] = resp
+
+				// avoid duplicates
+				for j := len(h) - 2; j >= 0; j-- {
+					if h[j] == h[len(h)-1] {
+						i.History[i.PromptType] = append(h[:j], h[j+1:]...)
+						break
+					}
+				}
 			}
-			i.PromptCallback = nil
+			// i.PromptCallback = nil
 		}
 		i.Replace(i.Start(), i.End(), "")
 	}

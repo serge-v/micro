@@ -1,13 +1,11 @@
 package display
 
 import (
-	"unicode/utf8"
-
 	runewidth "github.com/mattn/go-runewidth"
-	"github.com/zyedidia/micro/internal/buffer"
-	"github.com/zyedidia/micro/internal/config"
-	"github.com/zyedidia/micro/internal/screen"
-	"github.com/zyedidia/micro/internal/util"
+	"github.com/zyedidia/micro/v2/internal/buffer"
+	"github.com/zyedidia/micro/v2/internal/config"
+	"github.com/zyedidia/micro/v2/internal/screen"
+	"github.com/zyedidia/micro/v2/internal/util"
 )
 
 type TabWindow struct {
@@ -34,7 +32,7 @@ func (w *TabWindow) LocFromVisual(vloc buffer.Loc) int {
 
 	for i, n := range w.Names {
 		x++
-		s := utf8.RuneCountInString(n)
+		s := util.CharacterCountInString(n)
 		if vloc.Y == w.Y && vloc.X < x+s {
 			return i
 		}
@@ -75,7 +73,7 @@ func (w *TabWindow) SetActive(a int) {
 	s := w.TotalSize()
 
 	for i, n := range w.Names {
-		c := utf8.RuneCountInString(n)
+		c := util.CharacterCountInString(n)
 		if i == a {
 			if x+c >= w.hscroll+w.Width {
 				w.hscroll = util.Clamp(x+c+1-w.Width, 0, s-w.Width)

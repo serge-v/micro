@@ -7,25 +7,34 @@ import (
 	luar "layeh.com/gopher-luar"
 
 	lua "github.com/yuin/gopher-lua"
-	"github.com/zyedidia/micro/internal/buffer"
-	"github.com/zyedidia/micro/internal/config"
-	"github.com/zyedidia/micro/internal/display"
-	ulua "github.com/zyedidia/micro/internal/lua"
-	"github.com/zyedidia/micro/internal/screen"
+	"github.com/zyedidia/micro/v2/internal/buffer"
+	"github.com/zyedidia/micro/v2/internal/clipboard"
+	"github.com/zyedidia/micro/v2/internal/config"
+	"github.com/zyedidia/micro/v2/internal/display"
+	ulua "github.com/zyedidia/micro/v2/internal/lua"
+	"github.com/zyedidia/micro/v2/internal/screen"
 	"github.com/zyedidia/tcell"
 )
 
 type BufKeyAction func(*BufPane) bool
 type BufMouseAction func(*BufPane, *tcell.EventMouse) bool
 
-var BufKeyBindings map[Event]BufKeyAction
-var BufKeyStrings map[Event]string
-var BufMouseBindings map[MouseEvent]BufMouseAction
+var BufBindings *KeyTree
+
+func BufKeyActionGeneral(a BufKeyAction) PaneKeyAction {
+	return func(p Pane) bool {
+		return a(p.(*BufPane))
+	}
+}
+
+func BufMouseActionGeneral(a BufMouseAction) PaneMouseAction {
+	return func(p Pane, me *tcell.EventMouse) bool {
+		return a(p.(*BufPane), me)
+	}
+}
 
 func init() {
-	BufKeyBindings = make(map[Event]BufKeyAction)
-	BufKeyStrings = make(map[Event]string)
-	BufMouseBindings = make(map[MouseEvent]BufMouseAction)
+	BufBindings = NewKeyTree()
 }
 
 func LuaAction(fn string) func(*BufPane) bool {
@@ -51,9 +60,17 @@ func LuaAction(fn string) func(*BufPane) bool {
 	}
 }
 
-// BufMapKey maps a key event to an action
-func BufMapKey(k Event, action string) {
-	BufKeyStrings[k] = action
+// BufMapKey maps an event to an action
+func BufMapEvent(k Event, action string) {
+	switch e := k.(type) {
+	case KeyEvent, KeySequenceEvent, RawEvent:
+		bufMapKey(e, action)
+	case MouseEvent:
+		bufMapMouse(e, action)
+	}
+}
+
+func bufMapKey(k Event, action string) {
 	var actionfns []func(*BufPane) bool
 	var names []string
 	var types []byte
@@ -108,10 +125,11 @@ func BufMapKey(k Event, action string) {
 		}
 		actionfns = append(actionfns, afn)
 	}
-	BufKeyBindings[k] = func(h *BufPane) bool {
+	bufAction := func(h *BufPane) bool {
 		cursors := h.Buf.GetCursors()
 		success := true
 		for i, a := range actionfns {
+			innerSuccess := true
 			for j, c := range cursors {
 				if c == nil {
 					continue
@@ -119,24 +137,41 @@ func BufMapKey(k Event, action string) {
 				h.Buf.SetCurCursor(c.Num)
 				h.Cursor = c
 				if i == 0 || (success && types[i-1] == '&') || (!success && types[i-1] == '|') || (types[i-1] == ',') {
-					success = h.execAction(a, names[i], j)
+					innerSuccess = innerSuccess && h.execAction(a, names[i], j)
 				} else {
 					break
 				}
 			}
+			// if the action changed the current pane, update the reference
+			h = MainTab().CurPane()
+			success = innerSuccess
 		}
 		return true
 	}
+
+	BufBindings.RegisterKeyBinding(k, BufKeyActionGeneral(bufAction))
 }
 
 // BufMapMouse maps a mouse event to an action
-func BufMapMouse(k MouseEvent, action string) {
+func bufMapMouse(k MouseEvent, action string) {
 	if f, ok := BufMouseActions[action]; ok {
-		BufMouseBindings[k] = f
+		BufBindings.RegisterMouseBinding(k, BufMouseActionGeneral(f))
 	} else {
-		delete(BufMouseBindings, k)
-		BufMapKey(k, action)
+		// TODO
+		// delete(BufMouseBindings, k)
+		bufMapKey(k, action)
 	}
+}
+
+// BufUnmap unmaps a key or mouse event from any action
+func BufUnmap(k Event) {
+	// TODO
+	// delete(BufKeyBindings, k)
+	//
+	// switch e := k.(type) {
+	// case MouseEvent:
+	// 	delete(BufMouseBindings, e)
+	// }
 }
 
 // The BufPane connects the buffer and the window
@@ -147,9 +182,13 @@ func BufMapMouse(k MouseEvent, action string) {
 type BufPane struct {
 	display.BWindow
 
+	// Buf is the buffer this BufPane views
 	Buf *buffer.Buffer
+	// Bindings stores the association of key events and actions
+	bindings *KeyTree
 
-	Cursor *buffer.Cursor // the active cursor
+	// Cursor is the currently active buffer cursor
+	Cursor *buffer.Cursor
 
 	// Since tcell doesn't differentiate between a mouse release event
 	// and a mouse move event with no keys pressed, we need to keep
@@ -179,7 +218,8 @@ type BufPane struct {
 	tripleClick bool
 
 	// Last search stores the last successful search for FindNext and FindPrev
-	lastSearch string
+	lastSearch      string
+	lastSearchRegex bool
 	// Should the current multiple cursor selection search based on word or
 	// based on selection (false for selection, true for word)
 	multiWord bool
@@ -318,7 +358,7 @@ func (h *BufPane) HandleEvent(event tcell.Event) {
 		switch e.Buttons() {
 		case tcell.Button1:
 			_, my := e.Position()
-			if h.Buf.Settings["statusline"].(bool) && my >= h.GetView().Y+h.GetView().Height-1 {
+			if h.Buf.Type.Kind != buffer.BTInfo.Kind && h.Buf.Settings["statusline"].(bool) && my >= h.GetView().Y+h.GetView().Height-1 {
 				cancel = true
 			}
 		case tcell.ButtonNone:
@@ -346,7 +386,7 @@ func (h *BufPane) HandleEvent(event tcell.Event) {
 				// 	h.Cursor.SetSelectionEnd(h.Cursor.Loc)
 				// }
 				if h.Cursor.HasSelection() {
-					h.Cursor.CopySelection("primary")
+					h.Cursor.CopySelection(clipboard.PrimaryReg)
 				}
 				h.mouseReleased = true
 			}
@@ -379,13 +419,26 @@ func (h *BufPane) HandleEvent(event tcell.Event) {
 	}
 }
 
+func (h *BufPane) Bindings() *KeyTree {
+	if h.bindings != nil {
+		return h.bindings
+	}
+	return BufBindings
+}
+
 // DoKeyEvent executes a key event by finding the action it is bound
 // to and executing it (possibly multiple times for multiple cursors)
 func (h *BufPane) DoKeyEvent(e Event) bool {
-	if action, ok := BufKeyBindings[e]; ok {
-		return action(h)
+	binds := h.Bindings()
+	action, more := binds.NextEvent(e, nil)
+	if action != nil && !more {
+		action(h)
+		binds.ResetEvents()
+		return true
+	} else if action == nil && !more {
+		binds.ResetEvents()
 	}
-	return false
+	return more
 }
 
 func (h *BufPane) execAction(action func(*BufPane) bool, name string, cursor int) bool {
@@ -419,22 +472,34 @@ func (h *BufPane) completeAction(action string) {
 }
 
 func (h *BufPane) HasKeyEvent(e Event) bool {
-	_, ok := BufKeyBindings[e]
-	return ok
+	// TODO
+	return true
+	// _, ok := BufKeyBindings[e]
+	// return ok
 }
 
 // DoMouseEvent executes a mouse event by finding the action it is bound
 // to and executing it
 func (h *BufPane) DoMouseEvent(e MouseEvent, te *tcell.EventMouse) bool {
-	if action, ok := BufMouseBindings[e]; ok {
-		if action(h, te) {
-			h.Relocate()
-		}
+	binds := h.Bindings()
+	action, _ := binds.NextEvent(e, te)
+	if action != nil {
+		action(h)
+		binds.ResetEvents()
 		return true
-	} else if h.HasKeyEvent(e) {
-		return h.DoKeyEvent(e)
 	}
+	// TODO
 	return false
+
+	// if action, ok := BufMouseBindings[e]; ok {
+	// 	if action(h, te) {
+	// 		h.Relocate()
+	// 	}
+	// 	return true
+	// } else if h.HasKeyEvent(e) {
+	// 	return h.DoKeyEvent(e)
+	// }
+	// return false
 }
 
 // DoRuneInsert inserts a given rune into the current buffer
@@ -517,112 +582,116 @@ func (h *BufPane) SetActive(b bool) {
 
 // BufKeyActions contains the list of all possible key actions the bufhandler could execute
 var BufKeyActions = map[string]BufKeyAction{
-	"CursorUp":                 (*BufPane).CursorUp,
-	"CursorDown":               (*BufPane).CursorDown,
-	"CursorPageUp":             (*BufPane).CursorPageUp,
-	"CursorPageDown":           (*BufPane).CursorPageDown,
-	"CursorLeft":               (*BufPane).CursorLeft,
-	"CursorRight":              (*BufPane).CursorRight,
-	"CursorStart":              (*BufPane).CursorStart,
-	"CursorEnd":                (*BufPane).CursorEnd,
-	"SelectToStart":            (*BufPane).SelectToStart,
-	"SelectToEnd":              (*BufPane).SelectToEnd,
-	"SelectUp":                 (*BufPane).SelectUp,
-	"SelectDown":               (*BufPane).SelectDown,
-	"SelectLeft":               (*BufPane).SelectLeft,
-	"SelectRight":              (*BufPane).SelectRight,
-	"WordRight":                (*BufPane).WordRight,
-	"WordLeft":                 (*BufPane).WordLeft,
-	"SelectWordRight":          (*BufPane).SelectWordRight,
-	"SelectWordLeft":           (*BufPane).SelectWordLeft,
-	"DeleteWordRight":          (*BufPane).DeleteWordRight,
-	"DeleteWordLeft":           (*BufPane).DeleteWordLeft,
-	"SelectLine":               (*BufPane).SelectLine,
-	"SelectToStartOfLine":      (*BufPane).SelectToStartOfLine,
-	"SelectToStartOfText":      (*BufPane).SelectToStartOfText,
-	"SelectToStartOfTextToggle":(*BufPane).SelectToStartOfTextToggle,
-	"SelectToEndOfLine":        (*BufPane).SelectToEndOfLine,
-	"ParagraphPrevious":        (*BufPane).ParagraphPrevious,
-	"ParagraphNext":            (*BufPane).ParagraphNext,
-	"InsertNewline":            (*BufPane).InsertNewline,
-	"Backspace":                (*BufPane).Backspace,
-	"Delete":                   (*BufPane).Delete,
-	"InsertTab":                (*BufPane).InsertTab,
-	"Save":                     (*BufPane).Save,
-	"SaveAll":                  (*BufPane).SaveAll,
-	"SaveAs":                   (*BufPane).SaveAs,
-	"Find":                     (*BufPane).Find,
-	"FindNext":                 (*BufPane).FindNext,
-	"FindPrevious":             (*BufPane).FindPrevious,
-	"Center":                   (*BufPane).Center,
-	"Undo":                     (*BufPane).Undo,
-	"Redo":                     (*BufPane).Redo,
-	"Copy":                     (*BufPane).Copy,
-	"Cut":                      (*BufPane).Cut,
-	"CutLine":                  (*BufPane).CutLine,
-	"DuplicateLine":            (*BufPane).DuplicateLine,
-	"DeleteLine":               (*BufPane).DeleteLine,
-	"MoveLinesUp":              (*BufPane).MoveLinesUp,
-	"MoveLinesDown":            (*BufPane).MoveLinesDown,
-	"IndentSelection":          (*BufPane).IndentSelection,
-	"OutdentSelection":         (*BufPane).OutdentSelection,
-	"Autocomplete":             (*BufPane).Autocomplete,
-	"CycleAutocompleteBack":    (*BufPane).CycleAutocompleteBack,
-	"OutdentLine":              (*BufPane).OutdentLine,
-	"IndentLine":               (*BufPane).IndentLine,
-	"Paste":                    (*BufPane).Paste,
-	"PastePrimary":             (*BufPane).PastePrimary,
-	"SelectAll":                (*BufPane).SelectAll,
-	"OpenFile":                 (*BufPane).OpenFile,
-	"Start":                    (*BufPane).Start,
-	"End":                      (*BufPane).End,
-	"PageUp":                   (*BufPane).PageUp,
-	"PageDown":                 (*BufPane).PageDown,
-	"SelectPageUp":             (*BufPane).SelectPageUp,
-	"SelectPageDown":           (*BufPane).SelectPageDown,
-	"HalfPageUp":               (*BufPane).HalfPageUp,
-	"HalfPageDown":             (*BufPane).HalfPageDown,
-	"StartOfText":              (*BufPane).StartOfText,
-	"StartOfTextToggle":        (*BufPane).StartOfTextToggle,
-	"StartOfLine":              (*BufPane).StartOfLine,
-	"EndOfLine":                (*BufPane).EndOfLine,
-	"ToggleHelp":               (*BufPane).ToggleHelp,
-	"ToggleKeyMenu":            (*BufPane).ToggleKeyMenu,
-	"ToggleDiffGutter":         (*BufPane).ToggleDiffGutter,
-	"ToggleRuler":              (*BufPane).ToggleRuler,
-	"ClearStatus":              (*BufPane).ClearStatus,
-	"ShellMode":                (*BufPane).ShellMode,
-	"CommandMode":              (*BufPane).CommandMode,
-	"ToggleOverwriteMode":      (*BufPane).ToggleOverwriteMode,
-	"Escape":                   (*BufPane).Escape,
-	"Quit":                     (*BufPane).Quit,
-	"QuitAll":                  (*BufPane).QuitAll,
-	"AddTab":                   (*BufPane).AddTab,
-	"PreviousTab":              (*BufPane).PreviousTab,
-	"NextTab":                  (*BufPane).NextTab,
-	"NextSplit":                (*BufPane).NextSplit,
-	"PreviousSplit":            (*BufPane).PreviousSplit,
-	"Unsplit":                  (*BufPane).Unsplit,
-	"VSplit":                   (*BufPane).VSplitAction,
-	"HSplit":                   (*BufPane).HSplitAction,
-	"ToggleMacro":              (*BufPane).ToggleMacro,
-	"PlayMacro":                (*BufPane).PlayMacro,
-	"Suspend":                  (*BufPane).Suspend,
-	"ScrollUp":                 (*BufPane).ScrollUpAction,
-	"ScrollDown":               (*BufPane).ScrollDownAction,
-	"SpawnMultiCursor":         (*BufPane).SpawnMultiCursor,
-	"SpawnMultiCursorUp":       (*BufPane).SpawnMultiCursorUp,
-	"SpawnMultiCursorDown":     (*BufPane).SpawnMultiCursorDown,
-	"SpawnMultiCursorSelect":   (*BufPane).SpawnMultiCursorSelect,
-	"RemoveMultiCursor":        (*BufPane).RemoveMultiCursor,
-	"RemoveAllMultiCursors":    (*BufPane).RemoveAllMultiCursors,
-	"SkipMultiCursor":          (*BufPane).SkipMultiCursor,
-	"JumpToMatchingBrace":      (*BufPane).JumpToMatchingBrace,
-	"JumpLine":                 (*BufPane).JumpLine,
-	"None":                     (*BufPane).None,
+	"CursorUp":                  (*BufPane).CursorUp,
+	"CursorDown":                (*BufPane).CursorDown,
+	"CursorPageUp":              (*BufPane).CursorPageUp,
+	"CursorPageDown":            (*BufPane).CursorPageDown,
+	"CursorLeft":                (*BufPane).CursorLeft,
+	"CursorRight":               (*BufPane).CursorRight,
+	"CursorStart":               (*BufPane).CursorStart,
+	"CursorEnd":                 (*BufPane).CursorEnd,
+	"SelectToStart":             (*BufPane).SelectToStart,
+	"SelectToEnd":               (*BufPane).SelectToEnd,
+	"SelectUp":                  (*BufPane).SelectUp,
+	"SelectDown":                (*BufPane).SelectDown,
+	"SelectLeft":                (*BufPane).SelectLeft,
+	"SelectRight":               (*BufPane).SelectRight,
+	"WordRight":                 (*BufPane).WordRight,
+	"WordLeft":                  (*BufPane).WordLeft,
+	"SelectWordRight":           (*BufPane).SelectWordRight,
+	"SelectWordLeft":            (*BufPane).SelectWordLeft,
+	"DeleteWordRight":           (*BufPane).DeleteWordRight,
+	"DeleteWordLeft":            (*BufPane).DeleteWordLeft,
+	"SelectLine":                (*BufPane).SelectLine,
+	"SelectToStartOfLine":       (*BufPane).SelectToStartOfLine,
+	"SelectToStartOfText":       (*BufPane).SelectToStartOfText,
+	"SelectToStartOfTextToggle": (*BufPane).SelectToStartOfTextToggle,
+	"SelectToEndOfLine":         (*BufPane).SelectToEndOfLine,
+	"ParagraphPrevious":         (*BufPane).ParagraphPrevious,
+	"ParagraphNext":             (*BufPane).ParagraphNext,
+	"InsertNewline":             (*BufPane).InsertNewline,
+	"Backspace":                 (*BufPane).Backspace,
+	"Delete":                    (*BufPane).Delete,
+	"InsertTab":                 (*BufPane).InsertTab,
+	"Save":                      (*BufPane).Save,
+	"SaveAll":                   (*BufPane).SaveAll,
+	"SaveAs":                    (*BufPane).SaveAs,
+	"Find":                      (*BufPane).Find,
+	"FindLiteral":               (*BufPane).FindLiteral,
+	"FindNext":                  (*BufPane).FindNext,
+	"FindPrevious":              (*BufPane).FindPrevious,
+	"Center":                    (*BufPane).Center,
+	"Undo":                      (*BufPane).Undo,
+	"Redo":                      (*BufPane).Redo,
+	"Copy":                      (*BufPane).Copy,
+	"CopyLine":                  (*BufPane).CopyLine,
+	"Cut":                       (*BufPane).Cut,
+	"CutLine":                   (*BufPane).CutLine,
+	"DuplicateLine":             (*BufPane).DuplicateLine,
+	"DeleteLine":                (*BufPane).DeleteLine,
+	"MoveLinesUp":               (*BufPane).MoveLinesUp,
+	"MoveLinesDown":             (*BufPane).MoveLinesDown,
+	"IndentSelection":           (*BufPane).IndentSelection,
+	"OutdentSelection":          (*BufPane).OutdentSelection,
+	"Autocomplete":              (*BufPane).Autocomplete,
+	"CycleAutocompleteBack":     (*BufPane).CycleAutocompleteBack,
+	"OutdentLine":               (*BufPane).OutdentLine,
+	"IndentLine":                (*BufPane).IndentLine,
+	"Paste":                     (*BufPane).Paste,
+	"PastePrimary":              (*BufPane).PastePrimary,
+	"SelectAll":                 (*BufPane).SelectAll,
+	"OpenFile":                  (*BufPane).OpenFile,
+	"Start":                     (*BufPane).Start,
+	"End":                       (*BufPane).End,
+	"PageUp":                    (*BufPane).PageUp,
+	"PageDown":                  (*BufPane).PageDown,
+	"SelectPageUp":              (*BufPane).SelectPageUp,
+	"SelectPageDown":            (*BufPane).SelectPageDown,
+	"HalfPageUp":                (*BufPane).HalfPageUp,
+	"HalfPageDown":              (*BufPane).HalfPageDown,
+	"StartOfText":               (*BufPane).StartOfText,
+	"StartOfTextToggle":         (*BufPane).StartOfTextToggle,
+	"StartOfLine":               (*BufPane).StartOfLine,
+	"EndOfLine":                 (*BufPane).EndOfLine,
+	"ToggleHelp":                (*BufPane).ToggleHelp,
+	"ToggleKeyMenu":             (*BufPane).ToggleKeyMenu,
+	"ToggleDiffGutter":          (*BufPane).ToggleDiffGutter,
+	"ToggleRuler":               (*BufPane).ToggleRuler,
+	"ClearStatus":               (*BufPane).ClearStatus,
+	"ShellMode":                 (*BufPane).ShellMode,
+	"CommandMode":               (*BufPane).CommandMode,
+	"ToggleOverwriteMode":       (*BufPane).ToggleOverwriteMode,
+	"Escape":                    (*BufPane).Escape,
+	"Quit":                      (*BufPane).Quit,
+	"QuitAll":                   (*BufPane).QuitAll,
+	"AddTab":                    (*BufPane).AddTab,
+	"PreviousTab":               (*BufPane).PreviousTab,
+	"NextTab":                   (*BufPane).NextTab,
+	"NextSplit":                 (*BufPane).NextSplit,
+	"PreviousSplit":             (*BufPane).PreviousSplit,
+	"Unsplit":                   (*BufPane).Unsplit,
+	"VSplit":                    (*BufPane).VSplitAction,
+	"HSplit":                    (*BufPane).HSplitAction,
+	"ToggleMacro":               (*BufPane).ToggleMacro,
+	"PlayMacro":                 (*BufPane).PlayMacro,
+	"Suspend":                   (*BufPane).Suspend,
+	"ScrollUp":                  (*BufPane).ScrollUpAction,
+	"ScrollDown":                (*BufPane).ScrollDownAction,
+	"SpawnMultiCursor":          (*BufPane).SpawnMultiCursor,
+	"SpawnMultiCursorUp":        (*BufPane).SpawnMultiCursorUp,
+	"SpawnMultiCursorDown":      (*BufPane).SpawnMultiCursorDown,
+	"SpawnMultiCursorSelect":    (*BufPane).SpawnMultiCursorSelect,
+	"RemoveMultiCursor":         (*BufPane).RemoveMultiCursor,
+	"RemoveAllMultiCursors":     (*BufPane).RemoveAllMultiCursors,
+	"SkipMultiCursor":           (*BufPane).SkipMultiCursor,
+	"JumpToMatchingBrace":       (*BufPane).JumpToMatchingBrace,
+	"JumpLine":                  (*BufPane).JumpLine,
+	"Deselect":                  (*BufPane).Deselect,
+	"ClearInfo":                 (*BufPane).ClearInfo,
+	"None":                      (*BufPane).None,
 
 	// This was changed to InsertNewline but I don't want to break backwards compatibility
-	"InsertEnter":              (*BufPane).InsertNewline,
+	"InsertEnter": (*BufPane).InsertNewline,
 }
 
 // BufMouseActions contains the list of all possible mouse actions the bufhandler could execute
@@ -669,6 +738,8 @@ var MultiActions = map[string]bool{
 	"InsertTab":                 true,
 	"FindNext":                  true,
 	"FindPrevious":              true,
+	"CopyLine":                  true,
+	"Copy":                      true,
 	"Cut":                       true,
 	"CutLine":                   true,
 	"DuplicateLine":             true,

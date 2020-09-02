@@ -4,13 +4,48 @@ import (
 	"errors"
 	"runtime"
 
-	"github.com/zyedidia/clipboard"
-	"github.com/zyedidia/micro/internal/display"
-	"github.com/zyedidia/micro/internal/screen"
-	"github.com/zyedidia/micro/internal/shell"
+	"github.com/zyedidia/micro/v2/internal/clipboard"
+	"github.com/zyedidia/micro/v2/internal/display"
+	"github.com/zyedidia/micro/v2/internal/screen"
+	"github.com/zyedidia/micro/v2/internal/shell"
 	"github.com/zyedidia/tcell"
 	"github.com/zyedidia/terminal"
 )
+
+type TermKeyAction func(*TermPane)
+
+var TermBindings *KeyTree
+
+func init() {
+	TermBindings = NewKeyTree()
+}
+
+func TermKeyActionGeneral(a TermKeyAction) PaneKeyAction {
+	return func(p Pane) bool {
+		a(p.(*TermPane))
+		return true
+	}
+}
+
+func TermMapEvent(k Event, action string) {
+	switch e := k.(type) {
+	case KeyEvent, KeySequenceEvent, RawEvent:
+		termMapKey(e, action)
+	case MouseEvent:
+		termMapMouse(e, action)
+	}
+}
+
+func termMapKey(k Event, action string) {
+	if f, ok := TermKeyActions[action]; ok {
+		TermBindings.RegisterKeyBinding(k, TermKeyActionGeneral(f))
+	}
+}
+
+func termMapMouse(k MouseEvent, action string) {
+	// TODO: map mouse
+	termMapKey(k, action)
+}
 
 type TermPane struct {
 	*shell.Terminal
@@ -53,6 +88,7 @@ func (t *TermPane) Tab() *Tab {
 
 func (t *TermPane) Close() {}
 
+// Quit closes this termpane
 func (t *TermPane) Quit() {
 	t.Close()
 	if len(MainTab().Panes) > 1 {
@@ -66,6 +102,7 @@ func (t *TermPane) Quit() {
 	}
 }
 
+// Unsplit removes this split
 func (t *TermPane) Unsplit() {
 	n := MainTab().GetNode(t.id)
 	n.Unsplit()
@@ -81,6 +118,26 @@ func (t *TermPane) Unsplit() {
 // copy-paste
 func (t *TermPane) HandleEvent(event tcell.Event) {
 	if e, ok := event.(*tcell.EventKey); ok {
+		ke := KeyEvent{
+			code: e.Key(),
+			mod:  e.Modifiers(),
+			r:    e.Rune(),
+		}
+		action, more := TermBindings.NextEvent(ke, nil)
+
+		if !more {
+			if action != nil {
+				action(t)
+				TermBindings.ResetEvents()
+				return
+			}
+			TermBindings.ResetEvents()
+		}
+
+		if more {
+			return
+		}
+
 		if t.Status == shell.TTDone {
 			switch e.Key() {
 			case tcell.KeyEscape, tcell.KeyCtrlQ, tcell.KeyEnter:
@@ -90,7 +147,7 @@ func (t *TermPane) HandleEvent(event tcell.Event) {
 			}
 		}
 		if e.Key() == tcell.KeyCtrlC && t.HasSelection() {
-			clipboard.WriteAll(t.GetSelection(t.GetView().Width), "clipboard")
+			clipboard.Write(t.GetSelection(t.GetView().Width), clipboard.ClipboardReg)
 			InfoBar.Message("Copied selection to clipboard")
 		} else if t.Status != shell.TTDone {
 			t.WriteString(event.EscSeq())
@@ -134,6 +191,41 @@ func (t *TermPane) HandleEvent(event tcell.Event) {
 	}
 }
 
+// Exit closes the termpane
+func (t *TermPane) Exit() {
+	t.Terminal.Close()
+	t.Quit()
+}
+
+// CommandMode opens the termpane's command mode
+func (t *TermPane) CommandMode() {
+	InfoBar.Prompt("> ", "", "TerminalCommand", nil, func(resp string, canceled bool) {
+		if !canceled {
+			t.HandleCommand(resp)
+		}
+	})
+}
+
+// NextSplit moves to the next split
+func (t *TermPane) NextSplit() {
+	a := t.tab.active
+	if a < len(t.tab.Panes)-1 {
+		a++
+	} else {
+		a = 0
+	}
+
+	t.tab.SetActive(a)
+}
+
+// HandleCommand handles a command for the term pane
 func (t *TermPane) HandleCommand(input string) {
 	InfoBar.Error("Commands are unsupported in term for now")
+}
+
+// TermKeyActions contains the list of all possible key actions the termpane could execute
+var TermKeyActions = map[string]TermKeyAction{
+	"Exit":        (*TermPane).Exit,
+	"CommandMode": (*TermPane).CommandMode,
+	"NextSplit":   (*TermPane).NextSplit,
 }
