@@ -75,6 +75,7 @@ func (h *BufPane) ExecCmd(args []string) {
 	var word string
 	var line string
 	var pos string
+	var currline string
 
 	if h != nil {
 		loc := buffer.Loc{h.Cursor.X, h.Cursor.Y}
@@ -84,14 +85,19 @@ func (h *BufPane) ExecCmd(args []string) {
 		offset = strconv.Itoa(offs)
 		if h.Cursor.HasSelection() {
 			sel = string(h.Cursor.GetSelection())
+			sel = strings.TrimSpace(sel)
 		} else {
 			h.Cursor.SelectWord()
 			word = strings.TrimSpace(string(h.Cursor.GetSelection()))
+			h.Cursor.Deselect(true)
+			h.Cursor.SelectLine()
+			currline = strings.TrimSpace(string(h.Cursor.GetSelection()))
 			h.Cursor.Deselect(true)
 		}
 
 		repl := strings.NewReplacer(
 			"{s}", sel,
+			"{l}", currline,
 			"{w}", word,
 			"{f}", h.Buf.AbsPath,
 			"{o}", offset,
@@ -113,6 +119,7 @@ func (h *BufPane) ExecCmd(args []string) {
 	cmd.Env = append(cmd.Env, "MICRO_FILE_POS="+pos)
 	cmd.Env = append(cmd.Env, "MICRO_SELECTION="+sel)
 	cmd.Env = append(cmd.Env, "MICRO_CURR_WORD="+word)
+	cmd.Env = append(cmd.Env, "MICRO_CURR_LINE="+currline)
 
 	buf, err := cmd.CombinedOutput()
 	text := strings.TrimSpace(string(buf))
@@ -128,9 +135,9 @@ func (h *BufPane) ExecCmd(args []string) {
 		return
 	}
 
-	e := findQfixPane("cmd:" + list[0])
+	e := findQfixPane("exec")
 	if e == nil {
-		b := buffer.NewBufferFromString(text, "cmd:"+list[0], buffer.BTScratch)
+		b := buffer.NewBufferFromString(text, "exec", buffer.BTScratch)
 		e = &qfixPane{
 			BufPane: NewBufPaneFromBuf(b, h.tab),
 			text:    text,
