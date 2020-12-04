@@ -64,6 +64,7 @@ func InitCommands() {
 		"raw":        {(*BufPane).RawCmd, nil},
 		"textfilter": {(*BufPane).TextFilterCmd, nil},
 		"exec":       {(*BufPane).ExecCmd, compgen},
+		"php":        {(*BufPane).PhpCmd, nil},
 	}
 }
 

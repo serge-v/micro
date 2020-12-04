@@ -19,7 +19,8 @@ require (
 	github.com/zyedidia/pty v2.0.0+incompatible // indirect
 	github.com/zyedidia/tcell v1.4.12
 	github.com/zyedidia/terminal v0.0.0-20180726154117-533c623e2415
-	golang.org/x/text v0.3.2
+	golang.org/x/net v0.0.0-20201202161906-c7110b5ffcbb
+	golang.org/x/text v0.3.3
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 	gopkg.in/yaml.v2 v2.2.7
 	layeh.com/gopher-luar v1.0.7
