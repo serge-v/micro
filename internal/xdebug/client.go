@@ -15,19 +15,21 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// Editor is a callback interface for editor automation.
 type Editor interface {
-	OpenCmd([]string)
-	GotoCmd([]string)
-	Message(msg ...interface{})
-	Error(msg ...interface{})
+	OpenCmd([]string)           // open FILE
+	GotoCmd([]string)           // goto LINE
+	Message(msg ...interface{}) // shows message on status bar
+	Error(msg ...interface{})   // shows error message on status bar
 }
 
+// Client is a xdebug client. Inits yaml-tagged fields from ./init.yaml file.
 type Client struct {
-	BasePath    string   `yaml:"base_path"` // file:///path/to/the/project/root/
+	BasePath    string   `yaml:"base_path"` // source root dir i.e. file:///path/to/the/project/root/
 	InitCommand string   `yaml:"init"`      // command which calls php project after xdebug started
 	Breakpoints []string `yaml:breakpoints`
 
-	Editor Editor
+	Editor Editor // callback interface for editor automation
 
 	listener *net.TCPListener // listener on :9004
 	conn     *net.TCPConn     // accepted xdebugger connection
@@ -199,6 +201,8 @@ func (xc *Client) step(stepCmd string) error {
 	return nil
 }
 
+// Start starts debug session. It starts listening on :9003, makes initial request to php server
+// and accepts connection from xdebug. Then it sets breakpoints from init.yaml file.
 func (xc *Client) Start() error {
 	var err error
 	xc.listener, err = listen()
@@ -226,6 +230,7 @@ func (xc *Client) Start() error {
 	return nil
 }
 
+// Close closes accepted and listening sockets.
 func (xc *Client) Close() error {
 	if err := xc.listener.Close(); err != nil {
 		log.Println(err)
@@ -312,7 +317,7 @@ func (xc *Client) processParameters() error {
 
 	for _, b := range xc.Breakpoints {
 		cc := strings.Split(b, " ")
-		s := fmt.Sprintf("breakpoint_set -i %d -t line -f %s -n %s\x00", xc.transID, cc[0], cc[1])
+		s := fmt.Sprintf("breakpoint_set -i %d -t line -f %s%s -n %s\x00", xc.transID, xc.BasePath, cc[0], cc[1])
 		xc.transID++
 		resp, err := xc.send(s)
 		if err != nil {
@@ -326,6 +331,8 @@ func (xc *Client) processParameters() error {
 	return nil
 }
 
+// ProcessCommand handles commands from the editor. It interacts with the editor by
+// calling Editor interface methods.
 func (xc *Client) ProcessCommand(args []string) error {
 	var t string
 

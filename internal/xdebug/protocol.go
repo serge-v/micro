@@ -29,7 +29,7 @@ func listen() (*net.TCPListener, error) {
 func accept(l *net.TCPListener) (*net.TCPConn, error) {
 	var err error
 
-	log.Println("waiting for connect from xdebug proxy to :9004")
+	log.Println("waiting for connect from xdebug to :9003")
 
 	if err := l.SetDeadline(time.Now().Add(time.Second * 5)); err != nil {
 		return nil, fmt.Errorf("set accept deadline. error: %w", err)
